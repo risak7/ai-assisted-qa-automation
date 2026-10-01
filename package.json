@@ -6,6 +6,8 @@
   "scripts": {
     "postinstall": "playwright install",
     "test": "playwright test",
+    "test:didaxis": "playwright test tests/ds1-create-program.spec.ts tests/ds2-create-program.spec.ts tests/ds3-create-program.spec.ts tests/ds4-create-program.spec.ts tests/ds5-create-program.spec.ts --project=chromium",
+    "test:didaxis:cross-browser": "playwright test tests/ds1-create-program.spec.ts --workers=1",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
     "report": "playwright show-report"
@@ -23,6 +25,10 @@
   },
   "homepage": "https://github.com/risak7/ai-assisted-qa-automation#readme",
   "devDependencies": {
-    "@playwright/test": "^1.63.0"
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.3"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.4"
   }
 }

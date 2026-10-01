@@ -1,3 +1,9 @@
+import dotenv from 'dotenv';
+import path from 'path';
+
+const envPath = path.resolve(__dirname, '.env');
+dotenv.config({ path: envPath });
+
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
@@ -13,7 +19,7 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: { ...devices['Desktop Chrome'], channel: 'chrome' },
     },
     {
       name: 'firefox',
