@@ -1,4 +1,3 @@
-import '../load-env';
 import { expect, test } from '@playwright/test';
 import {
   clickCreateProgram,

@@ -25,9 +25,7 @@ Every test is **skipped** with a message about missing `DIDAXIS_EMAIL` / `DIDAXI
    DIDAXIS_PASSWORD=your-password
    ```
 
-3. Load env in two places:
-   - `playwright.config.ts` → `path.resolve(__dirname, '.env')`
-   - Each Didaxis spec → `import '../load-env'` (see `load-env.ts`)
+3. `playwright.config.ts` loads it with `dotenv.config({ path: path.resolve(__dirname, '.env') })` before the workers start. The workers inherit those variables. There is no separate `load-env.ts`.
 
 4. Verify without printing secrets:
 
@@ -270,7 +268,7 @@ If the trace shows **POST 200** and modal closed but **no row**, add/wait for li
 
 DS-1 through DS-5 already import `tests/helpers/didaxis-programs.ts`. Change waits and locators there, not in each spec.
 
-1. **`import '../load-env'`** at the top of a new spec (the helper also loads it).
+1. Do not add another dotenv loader. `playwright.config.ts` already loads the root `.env`.
 2. **`test.describe.configure({ mode: 'serial', timeout: 120_000 })`**.
 3. Every successful create: **`submitCreateProgram` → `expectProgramInList`**.
 4. Open the form with **`openNewProgramModal`** (normal Playwright `click()`). Do not replace that click with `element.click()`, `force: true`, or a second click unless the change is WebKit-only and Chromium DS-1 still passes afterward.
@@ -283,7 +281,7 @@ DS-1 through DS-5 already import `tests/helpers/didaxis-programs.ts`. Change wai
 
 | Failure message | Likely cause | What to check |
 |-----------------|--------------|----------------|
-| All tests skipped | Missing `.env` keys | Root `.env`, `load-env` import |
+| All tests skipped | Missing `.env` keys | Root `.env` and the `dotenv` load in `playwright.config.ts` |
 | Executable doesn’t exist | Browser not installed | `--project=chromium` or `playwright install` |
 | Modal not visible | Open click never landed | `openNewProgramModal` must stay a real Playwright `click()`. In-page `element.click()` does not run React and breaks Chromium. |
 | Click timeout, overlay intercepts pointer events | A second click hit `.mantine-Modal-overlay` | Do not retry the click. The first click already opened the modal. |

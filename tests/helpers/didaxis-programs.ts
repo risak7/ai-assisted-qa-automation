@@ -1,4 +1,3 @@
-import '../../load-env';
 import { expect, test, type Locator, type Page, type Response } from '@playwright/test';
 
 const baseUrl = process.env.DIDAXIS_URL ?? 'https://test.didaxis.studio';
@@ -106,6 +105,10 @@ export function editNameField(page: Page): Locator {
 
 export function editDescriptionField(page: Page): Locator {
   return editProgramModal(page).getByLabel('Description');
+}
+
+export function editLabeledField(page: Page, label: string): Locator {
+  return editProgramModal(page).getByLabel(label, { exact: true });
 }
 
 export function saveButton(page: Page): Locator {
