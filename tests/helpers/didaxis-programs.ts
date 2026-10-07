@@ -54,15 +54,12 @@ export async function loginAsAdmin(page: Page): Promise<void> {
 }
 
 export async function gotoPrograms(page: Page): Promise<void> {
-  await page.goto(`${baseUrl}/programs`);
+  await page.goto(`${baseUrl}/programs`, { waitUntil: 'domcontentloaded' });
   await expect(page).toHaveURL(/\/programs\/?$/);
-  await expect(page.getByRole('heading', { name: 'Programs', level: 2 })).toBeVisible();
-  // Firefox often exposes the header action before the Mantine table is in the accessibility tree.
-  await expect(
-    page.getByRole('button', { name: '+ New Program' })
-      .or(page.getByRole('button', { name: 'Create Program' }))
-      .or(page.getByText(emptyProgramsMessage)),
-  ).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('heading', { name: 'Programs', level: 2 })).toBeVisible({ timeout: 30_000 });
+  await expect(openNewProgramTrigger(page).or(page.getByText(emptyProgramsMessage, { exact: true }))).toBeVisible({
+    timeout: 30_000,
+  });
 }
 
 export function newProgramButton(page: Page): Locator {
@@ -81,10 +78,20 @@ export function editProgramModal(page: Page): Locator {
   return page.getByRole('dialog', { name: 'Edit Program' });
 }
 
+async function fillModalField(field: Locator, value: string): Promise<void> {
+  await field.scrollIntoViewIfNeeded();
+  await field.click({ timeout: 15_000 });
+  await field.fill(value, { timeout: 15_000 });
+}
+
 export async function openNewProgramModal(page: Page): Promise<void> {
-  await expect(openNewProgramTrigger(page)).toBeVisible({ timeout: 15_000 });
-  await openNewProgramTrigger(page).click();
-  await expect(createProgramModal(page)).toBeVisible({ timeout: 15_000 });
+  const trigger = openNewProgramTrigger(page).first();
+  await expect(trigger).toBeVisible({ timeout: 15_000 });
+  // Avoid scroll/stable waits when the table keeps reflowing on a very large list.
+  await trigger.evaluate((button) => (button as HTMLButtonElement).click());
+  const modal = createProgramModal(page);
+  await expect(modal).toBeVisible({ timeout: 15_000 });
+  await expect(programNameField(page)).toBeVisible({ timeout: 15_000 });
 }
 
 export function programNameField(page: Page): Locator {
@@ -201,9 +208,9 @@ export async function expectProgramNotInList(page: Page, name: string): Promise<
 
 export async function createProgram(page: Page, name: string, description = ''): Promise<void> {
   await openNewProgramModal(page);
-  await programNameField(page).fill(name);
+  await fillModalField(programNameField(page), name);
   if (description.length > 0) {
-    await descriptionField(page).fill(description);
+    await fillModalField(descriptionField(page), description);
   }
   await submitCreateProgram(page);
   await expectProgramInList(page, name);

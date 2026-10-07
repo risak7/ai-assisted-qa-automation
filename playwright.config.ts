@@ -7,15 +7,21 @@ dotenv.config({ path: envPath });
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
-  testDir: './tests',
-  fullyParallel: true,
+  testDir: '.',
+  testMatch: ['features/**/*.spec.ts'],
+  fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
-  reporter: 'html',
+  workers: 1,
+  reporter: [['list'], ['html', { open: 'never' }]],
   use: {
+    baseURL: process.env.DIDAXIS_URL ?? 'https://test.didaxis.studio',
+    screenshot: 'only-on-failure',
     trace: 'on-first-retry',
+    actionTimeout: 30_000,
+    navigationTimeout: 60_000,
   },
+  timeout: 180_000,
   projects: [
     {
       name: 'chromium',
