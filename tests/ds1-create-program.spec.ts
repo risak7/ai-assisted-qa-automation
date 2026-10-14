@@ -1,9 +1,10 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '../fixtures/cleanup.fixture';
 import {
   clickCreateProgram,
   countProgramRowsNamed,
   createButton,
   createProgramModal,
+  createdProgramId,
   description1000,
   descriptionField,
   gotoPrograms,
@@ -38,7 +39,7 @@ test.describe('Positive flows', () => {
     await expect(createButton(page)).toBeVisible();
   });
 
-  test('TC-002: A completed program is added to the list and the modal closes', async ({ page }) => {
+  test('TC-002: A completed program is added to the list and the modal closes', async ({ page, trackProgram }) => {
     const programName = `Web Development 2026 ${uniqueSuffix()}`;
     const description = 'Full-stack web development program';
 
@@ -46,18 +47,20 @@ test.describe('Positive flows', () => {
     await openNewProgramModal(page);
     await programNameField(page).fill(programName);
     await descriptionField(page).fill(description);
-    await submitCreateProgram(page);
+    const programId = await submitCreateProgram(page);
+    trackProgram(programId);
     await expectProgramInList(page, programName);
   });
 
-  test('TC-003: Program is created when Program Name is filled and Description is left empty', async ({ page }) => {
+  test('TC-003: Program is created when Program Name is filled and Description is left empty', async ({ page, trackProgram }) => {
     const programName = `Data Analytics 2026 ${uniqueSuffix()}`;
 
     await gotoPrograms(page);
     await openNewProgramModal(page);
     await programNameField(page).fill(programName);
     await expect(createButton(page)).toBeEnabled();
-    await submitCreateProgram(page);
+    const programId = await submitCreateProgram(page);
+    trackProgram(programId);
     await expectProgramInList(page, programName);
   });
 });
@@ -94,20 +97,24 @@ test.describe('Negative flows', () => {
     await expect(createButton(page)).toBeDisabled();
   });
 
-  test('TC-007: A duplicate Program Name is not added a second time', async ({ page }) => {
+  test('TC-007: A duplicate Program Name is not added a second time', async ({ page, trackProgram }) => {
     const programName = `Web Development 2026 ${uniqueSuffix()}`;
 
     await gotoPrograms(page);
     await openNewProgramModal(page);
     await programNameField(page).fill(programName);
     await descriptionField(page).fill('Full-stack web development program');
-    await submitCreateProgram(page);
+    const programId = await submitCreateProgram(page);
+    trackProgram(programId);
     await expectProgramInList(page, programName);
 
     await openNewProgramModal(page);
     await programNameField(page).fill(programName);
     await descriptionField(page).fill('Another full-stack cohort');
-    await clickCreateProgram(page);
+    const duplicateResponse = await clickCreateProgram(page);
+    if (duplicateResponse.ok()) {
+      trackProgram(await createdProgramId(duplicateResponse));
+    }
 
     await expect.poll(async () => countProgramRowsNamed(page, programName), { timeout: 15_000 }).toBeLessThanOrEqual(1);
 
@@ -141,29 +148,31 @@ test.describe('Edge cases', () => {
     await loginAsAdmin(page);
   });
 
-  test('TC-009: A one-character Program Name is accepted', async ({ page }) => {
+  test('TC-009: A one-character Program Name is accepted', async ({ page, trackProgram }) => {
     const programName = `A${uniqueSuffix()}`;
 
     await gotoPrograms(page);
     await openNewProgramModal(page);
     await programNameField(page).fill(programName);
     await descriptionField(page).fill('Single-letter program name');
-    await submitCreateProgram(page);
+    const programId = await submitCreateProgram(page);
+    trackProgram(programId);
     await expectProgramInList(page, programName);
   });
 
-  test('TC-010: Program Name with special characters is stored and shown as entered', async ({ page }) => {
+  test('TC-010: Program Name with special characters is stored and shown as entered', async ({ page, trackProgram }) => {
     const programName = `C++ & .NET (Cohort #1) ${uniqueSuffix()}`;
 
     await gotoPrograms(page);
     await openNewProgramModal(page);
     await programNameField(page).fill(programName);
     await descriptionField(page).fill('Systems programming with C++ and .NET');
-    await submitCreateProgram(page);
+    const programId = await submitCreateProgram(page);
+    trackProgram(programId);
     await expectProgramInList(page, programName);
   });
 
-  test('TC-011: Leading and trailing spaces in Program Name are trimmed before save', async ({ page }) => {
+  test('TC-011: Leading and trailing spaces in Program Name are trimmed before save', async ({ page, trackProgram }) => {
     const suffix = uniqueSuffix();
     const trimmedName = `Cybersecurity 2026 ${suffix}`;
     const paddedName = `  ${trimmedName}  `;
@@ -172,11 +181,12 @@ test.describe('Edge cases', () => {
     await openNewProgramModal(page);
     await programNameField(page).fill(paddedName);
     await descriptionField(page).fill('Defensive security program');
-    await submitCreateProgram(page);
+    const programId = await submitCreateProgram(page);
+    trackProgram(programId);
     await expectProgramInList(page, trimmedName);
   });
 
-  test('TC-012: A 255-character Program Name is accepted', async ({ page }) => {
+  test('TC-012: A 255-character Program Name is accepted', async ({ page, trackProgram }) => {
     const programName = textOfLength(255, `Web Development 2026 ${uniqueSuffix()} `);
 
     await gotoPrograms(page);
@@ -184,11 +194,12 @@ test.describe('Edge cases', () => {
     await programNameField(page).fill(programName);
     await descriptionField(page).fill('Boundary length name');
     await expect(createButton(page)).toBeEnabled();
-    await submitCreateProgram(page);
+    const programId = await submitCreateProgram(page);
+    trackProgram(programId);
     await expectProgramInList(page, programName);
   });
 
-  test('TC-013: A 256-character Program Name is rejected', async ({ page }) => {
+  test('TC-013: A 256-character Program Name is rejected', async ({ page, trackProgram }) => {
     const programName = textOfLength(256, `Web Development 2026 ${uniqueSuffix()} `);
 
     await gotoPrograms(page);
@@ -205,11 +216,14 @@ test.describe('Edge cases', () => {
       return;
     }
 
-    await clickCreateProgram(page);
+    const rejected = await clickCreateProgram(page);
+    if (rejected.ok()) {
+      trackProgram(await createdProgramId(rejected));
+    }
     await expectProgramNotInList(page, programName);
   });
 
-  test('TC-014: A Program Name that differs only by letter case is treated as a duplicate', async ({ page }) => {
+  test('TC-014: A Program Name that differs only by letter case is treated as a duplicate', async ({ page, trackProgram }) => {
     const suffix = uniqueSuffix();
     const canonicalName = `Web Development 2026 ${suffix}`;
     const variantName = canonicalName.toLowerCase();
@@ -218,13 +232,17 @@ test.describe('Edge cases', () => {
     await openNewProgramModal(page);
     await programNameField(page).fill(canonicalName);
     await descriptionField(page).fill('Original cohort');
-    await submitCreateProgram(page);
+    const programId = await submitCreateProgram(page);
+    trackProgram(programId);
     await expectProgramInList(page, canonicalName);
 
     await openNewProgramModal(page);
     await programNameField(page).fill(variantName);
     await descriptionField(page).fill('Case-variant duplicate');
-    await clickCreateProgram(page);
+    const duplicateResponse = await clickCreateProgram(page);
+    if (duplicateResponse.ok()) {
+      trackProgram(await createdProgramId(duplicateResponse));
+    }
 
     await expect.poll(async () => {
       const canonical = await countProgramRowsNamed(page, canonicalName);
@@ -233,7 +251,7 @@ test.describe('Edge cases', () => {
     }, { timeout: 15_000 }).toBeLessThanOrEqual(1);
   });
 
-  test('TC-015: Markup entered in Program Name is shown as text', async ({ page }) => {
+  test('TC-015: Markup entered in Program Name is shown as text', async ({ page, trackProgram }) => {
     const programName = `<script>alert("xss")</script> ${uniqueSuffix()}`;
     let dialogSeen = false;
     page.on('dialog', async (dialog) => {
@@ -245,12 +263,13 @@ test.describe('Edge cases', () => {
     await openNewProgramModal(page);
     await programNameField(page).fill(programName);
     await descriptionField(page).fill('Markup should be plain text');
-    await submitCreateProgram(page);
+    const programId = await submitCreateProgram(page);
+    trackProgram(programId);
     await expectProgramInList(page, programName);
     expect(dialogSeen).toBe(false);
   });
 
-  test('TC-016: A long Description is saved with the program', async ({ page }) => {
+  test('TC-016: A long Description is saved with the program', async ({ page, trackProgram }) => {
     const programName = `Cloud Engineering 2026 ${uniqueSuffix()}`;
     const description = description1000('Full-stack web development program');
 
@@ -258,7 +277,8 @@ test.describe('Edge cases', () => {
     await openNewProgramModal(page);
     await programNameField(page).fill(programName);
     await descriptionField(page).fill(description);
-    await submitCreateProgram(page);
+    const programId = await submitCreateProgram(page);
+    trackProgram(programId);
     await expectProgramInList(page, programName);
     const row = programRowByName(page, programName).first();
     await row.scrollIntoViewIfNeeded();

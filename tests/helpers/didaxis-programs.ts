@@ -184,11 +184,22 @@ export async function clickCreateProgram(page: Page): Promise<Response> {
   return response;
 }
 
-export async function submitCreateProgram(page: Page): Promise<void> {
+export async function createdProgramId(response: Response): Promise<string> {
+  const body = await response.json();
+  const id = body?.data?.id ?? body?.id;
+  if (typeof id !== 'string' || id.length === 0) {
+    throw new Error('Create program response did not include a program id');
+  }
+  return id;
+}
+
+export async function submitCreateProgram(page: Page): Promise<string> {
   const response = await clickCreateProgram(page);
   expect(response.ok()).toBeTruthy();
+  const id = await createdProgramId(response);
   await expect(createProgramModal(page)).toBeHidden({ timeout: 15_000 });
   await page.waitForResponse(isProgramsListGet, { timeout: 15_000 }).catch(() => undefined);
+  return id;
 }
 
 export async function expectProgramCount(page: Page, name: string, count: number): Promise<void> {
