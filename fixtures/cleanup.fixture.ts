@@ -1,4 +1,7 @@
 import { expect, test as base, type Page, type Response } from '@playwright/test';
+import { LoginPage } from '../pages/LoginPage';
+import type { ProgramsPage } from '../pages/ProgramsPage';
+import { gotoPrograms } from '../tests/helpers/didaxis-programs';
 
 const baseUrl = process.env.DIDAXIS_URL ?? 'https://test.didaxis.studio';
 
@@ -7,6 +10,7 @@ const latestToken = new WeakMap<Page, string>();
 
 type CleanupFixtures = {
   trackProgram: (uuid: string) => void;
+  programs: ProgramsPage;
 };
 
 function tokenStillValid(token: string): boolean {
@@ -69,18 +73,13 @@ async function captureTokenAfterLogin(page: Page): Promise<string> {
     throw new Error('DIDAXIS_API_TOKEN is expired. Set DIDAXIS_EMAIL and DIDAXIS_PASSWORD so cleanup can sign in and capture a new token.');
   }
 
-  await page.goto(`${baseUrl}/login`, { waitUntil: 'domcontentloaded' });
+  const login = new LoginPage(page);
+  await login.goto();
   if (!new URL(page.url()).pathname.endsWith('/login')) {
     return tokenFromNextApiCall(page);
   }
 
-  const loginResponse = page.waitForResponse((response) => {
-    return response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/api/auth/login');
-  }, { timeout: 30_000 });
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Sign In' }).click();
-  const response = await loginResponse;
+  const response = await login.signInAndWaitForApi(email, password);
   if (!response.ok()) {
     throw new Error(`Login failed while refreshing the API token (HTTP ${response.status()})`);
   }
@@ -127,6 +126,10 @@ export const test = base.extend<CleanupFixtures>({
   page: async ({ page }, use) => {
     watchPage(page);
     await use(page);
+  },
+
+  programs: async ({ page }, use) => {
+    await use(await gotoPrograms(page));
   },
 
   trackProgram: async ({ page }, use) => {

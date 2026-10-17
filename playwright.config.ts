@@ -8,12 +8,12 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: '.',
-  testMatch: ['features/**/*.spec.ts'],
+  testMatch: ['features/**/*.spec.ts', 'tests/**/*.a11y.spec.ts'],
   testIgnore: ['tests/manual/**'],
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: 1,
+  workers: 3,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: process.env.DIDAXIS_URL ?? 'https://test.didaxis.studio',
@@ -25,16 +25,27 @@ export default defineConfig({
   timeout: 180_000,
   projects: [
     {
-      name: 'chromium',
+      name: 'setup',
+      testMatch: /.*\.setup\.ts/,
       use: { ...devices['Desktop Chrome'], channel: 'chrome' },
     },
     {
-      name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
+      name: 'chromium',
+      testIgnore: ['tests/login.a11y.spec.ts'],
+      use: {
+        ...devices['Desktop Chrome'],
+        channel: 'chrome',
+        storageState: 'playwright/.auth/user.json',
+      },
+      dependencies: ['setup'],
     },
     {
-      name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
+      name: 'chromium-guest',
+      testMatch: ['tests/login.a11y.spec.ts'],
+      use: {
+        ...devices['Desktop Chrome'],
+        channel: 'chrome',
+      },
     },
   ],
 });

@@ -1,270 +1,239 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '../fixtures/cleanup.fixture';
+import type { ProgramsPage } from '../pages/ProgramsPage';
 import {
-  createButton,
-  createProgram,
-  descriptionField,
   expectProgramCount,
   expectProgramInList,
   expectProgramNotInList,
-  gotoPrograms,
-  programRowCount,
-  loginAsAdmin,
-  openNewProgramModal,
-  programNameField,
-  programRowByName,
-  readProgramFields,
-  skipWithoutAdminCredentials,
-  submitCreateProgram,
   textOfLength,
   uniqueSuffix,
 } from './helpers/didaxis-programs';
 
-test.describe.configure({ mode: 'serial', timeout: 120_000 });
+async function expectDuplicateNameNotAdded(
+  programs: ProgramsPage,
+  trackProgram: (uuid: string) => void,
+  attemptName: string,
+  attemptDescription: string,
+  listedName: string = attemptName.trim(),
+): Promise<void> {
+  await programs.openAndFillNewProgram(attemptName, attemptDescription);
+  const response = await programs.clickCreateOnNewProgram();
+  if (response.ok()) {
+    trackProgram(await programs.createdProgramId(response));
+  }
 
-test.describe('Positive flows', () => {
-  test.beforeEach(async ({ page }) => {
-    skipWithoutAdminCredentials();
-    await loginAsAdmin(page);
-    await gotoPrograms(page);
-  });
+  await expect.poll(async () => programs.countProgramRowsNamed(listedName), { timeout: 15_000 }).toBeLessThanOrEqual(1);
 
-  test('TC-001: Program Name "Informatique & IA - Niveau 2" is created', async ({ page }) => {
-    const programName = `Informatique & IA - Niveau 2 ${uniqueSuffix()}`;
-    const description = "Programme d'informatique et d'intelligence artificielle, niveau 2";
+  const rowCount = await programs.countProgramRowsNamed(listedName);
+  if (rowCount === 1) {
+    await expect(programs.duplicateNameMessage.or(programs.newProgramDialog)).toBeVisible();
+  }
+}
 
-    await createProgram(page, programName, description);
+test.describe('DS-3: Program name validation and duplicate prevention', () => {
+  test.describe.configure({ mode: 'serial', timeout: 120_000 });
 
-    await expect(programRowByName(page, programName).first()).toContainText(description);
-    const stored = await readProgramFields(page, programName);
-    expect(stored.name).toBe(programName);
-  });
+  test.describe('Positive flows', () => {
+    test('TC-001: Accept program name with special characters', async ({ programs, trackProgram }) => {
+      const programName = `Informatique & IA - Niveau 2 ${uniqueSuffix()}`;
+      const description = "Programme d'informatique et d'intelligence artificielle, niveau 2";
 
-  test('TC-002: A name with surrounding spaces is saved in trimmed form', async ({ page }) => {
-    const trimmedName = `Informatique & IA - Niveau 2 ${uniqueSuffix()}`;
-    const paddedName = `  ${trimmedName}  `;
-    const description = "Programme d'informatique et d'intelligence artificielle, niveau 2";
-
-    await openNewProgramModal(page);
-    await programNameField(page).fill(paddedName);
-    await descriptionField(page).fill(description);
-    await submitCreateProgram(page);
-
-    await expectProgramInList(page, trimmedName);
-    const stored = await readProgramFields(page, trimmedName);
-    expect(stored.name).toBe(trimmedName);
-  });
-
-  test('TC-003: A different Program Name is created when Description matches an existing program', async ({ page }) => {
-    const suffix = uniqueSuffix();
-    const existingName = `Web Development 2026 ${suffix}`;
-    const newName = `Data Analytics 2026 ${suffix}`;
-    const description = 'Full-stack web development program';
-    await createProgram(page, existingName, description);
-
-    await createProgram(page, newName, description);
-
-    await expectProgramInList(page, existingName);
-    await expectProgramInList(page, newName);
-  });
-});
-
-test.describe('Negative flows', () => {
-  test.beforeEach(async ({ page }) => {
-    skipWithoutAdminCredentials();
-    await loginAsAdmin(page);
-    await gotoPrograms(page);
-  });
-
-  test('TC-004: A Program Name of three spaces is not submitted', async ({ page }) => {
-    await openNewProgramModal(page);
-    await programNameField(page).fill('   ');
-    await descriptionField(page).fill('Full-stack web development program');
-
-    await expect(createButton(page)).toBeDisabled();
-  });
-
-  test('TC-005: An empty Program Name is not submitted', async ({ page }) => {
-    const before = await programRowCount(page);
-
-    await openNewProgramModal(page);
-    await descriptionField(page).fill('Full-stack web development program');
-
-    await expect(programNameField(page)).toHaveValue('');
-    await expect(createButton(page)).toBeDisabled();
-    expect(await programRowCount(page)).toBe(before);
-  });
-
-  test('TC-006: Creating an existing Program Name adds another row', async ({ page }) => {
-    const programName = `Web Development 2026 ${uniqueSuffix()}`;
-    const originalDescription = 'Full-stack web development program';
-    await createProgram(page, programName, originalDescription);
-
-    await openNewProgramModal(page);
-    await programNameField(page).fill(programName);
-    await descriptionField(page).fill('Another full-stack cohort');
-    await submitCreateProgram(page);
-
-    await expectProgramCount(page, programName, 2);
-    const original = await readProgramFields(page, programName, originalDescription);
-    expect(original.description).toBe(originalDescription);
-  });
-
-  test('TC-007: A trimmed name that matches an existing name is stored again', async ({ page }) => {
-    const programName = `Web Development 2026 ${uniqueSuffix()}`;
-    await createProgram(page, programName, 'Full-stack web development program');
-
-    await openNewProgramModal(page);
-    await programNameField(page).fill(`  ${programName}  `);
-    await descriptionField(page).fill('Another full-stack cohort');
-    await submitCreateProgram(page);
-
-    await expectProgramCount(page, programName, 2);
-    const stored = await readProgramFields(page, programName, 'Another full-stack cohort');
-    expect(stored.name).toBe(programName);
-  });
-
-  test('TC-008: A name that differs only by letter case is stored as entered', async ({ page }) => {
-    const programName = `Web Development 2026 ${uniqueSuffix()}`;
-    const caseVariant = programName.toLowerCase();
-    await createProgram(page, programName, 'Full-stack web development program');
-
-    await openNewProgramModal(page);
-    await programNameField(page).fill(caseVariant);
-    await descriptionField(page).fill('Case-variant duplicate');
-    await submitCreateProgram(page);
-
-    await expectProgramInList(page, programName);
-    await expectProgramInList(page, caseVariant);
-  });
-
-  test('TC-009: A tab-only Program Name is not submitted', async ({ page }) => {
-    await openNewProgramModal(page);
-    await programNameField(page).fill('\t');
-    await descriptionField(page).fill('Full-stack web development program');
-
-    await expect(programNameField(page)).toHaveValue('\t');
-    await expect(createButton(page)).toBeDisabled();
-  });
-
-  test('TC-010: A second program with the same name leaves the original Description unchanged', async ({ page }) => {
-    const programName = `Web Development 2026 ${uniqueSuffix()}`;
-    const originalDescription = 'Full-stack web development program';
-    const replacement = 'This description must not replace the original';
-    await createProgram(page, programName, originalDescription);
-
-    await openNewProgramModal(page);
-    await programNameField(page).fill(programName);
-    await descriptionField(page).fill(replacement);
-    await submitCreateProgram(page);
-
-    await expectProgramCount(page, programName, 2);
-    const original = await readProgramFields(page, programName, originalDescription);
-    expect(original.description).toBe(originalDescription);
-    const added = await readProgramFields(page, programName, replacement);
-    expect(added.description).toBe(replacement);
-  });
-});
-
-test.describe('Edge cases', () => {
-  test.beforeEach(async ({ page }) => {
-    skipWithoutAdminCredentials();
-    await loginAsAdmin(page);
-    await gotoPrograms(page);
-  });
-
-  test('TC-011: A short Program Name is accepted', async ({ page }) => {
-    const programName = `A${uniqueSuffix()}`;
-    const description = 'Single-letter program name';
-
-    await createProgram(page, programName, description);
-
-    await expect(programRowByName(page, programName).first()).toContainText(description);
-  });
-
-  test('TC-012: A name of spaces around one character is saved as that character', async ({ page }) => {
-    const trimmedName = `A${uniqueSuffix()}`;
-    const description = 'Trimmed single character';
-
-    await openNewProgramModal(page);
-    await programNameField(page).fill(`   ${trimmedName}   `);
-    await descriptionField(page).fill(description);
-    await submitCreateProgram(page);
-
-    await expectProgramInList(page, trimmedName);
-    const stored = await readProgramFields(page, trimmedName);
-    expect(stored.name).toBe(trimmedName);
-  });
-
-  test('TC-013: A 255-character Program Name is accepted', async ({ page }) => {
-    const programName = textOfLength(255, `Informatique & IA - Niveau 2 ${uniqueSuffix()} `);
-    const description = 'Boundary length name';
-
-    await openNewProgramModal(page);
-    await programNameField(page).fill(programName);
-    await descriptionField(page).fill(description);
-    expect(await programNameField(page).inputValue()).toHaveLength(255);
-    await expect(createButton(page)).toBeEnabled();
-    await submitCreateProgram(page);
-
-    await expectProgramInList(page, programName);
-  });
-
-  test('TC-014: A 256-character Program Name is saved', async ({ page }) => {
-    const programName = textOfLength(256, `Informatique & IA - Niveau 2 ${uniqueSuffix()} `);
-
-    await openNewProgramModal(page);
-    await programNameField(page).fill(programName);
-    await descriptionField(page).fill('Over max length name');
-    expect(await programNameField(page).inputValue()).toHaveLength(256);
-    await expect(createButton(page)).toBeEnabled();
-    await submitCreateProgram(page);
-
-    await expectProgramInList(page, programName);
-  });
-
-  test('TC-015: Additional punctuation in Program Name is preserved', async ({ page }) => {
-    const programName = `C++ / .NET (Cohort #1) ${uniqueSuffix()}`;
-
-    await createProgram(page, programName, 'Systems programming with C++ and .NET');
-
-    const stored = await readProgramFields(page, programName);
-    expect(stored.name).toBe(programName);
-  });
-
-  test('TC-016: A name that differs by punctuation from an existing name is accepted', async ({ page }) => {
-    const programName = `Web Development 2026 ${uniqueSuffix()}`;
-    const punctuatedName = `${programName}!`;
-    await createProgram(page, programName, 'Full-stack web development program');
-
-    await createProgram(page, punctuatedName, 'Name differs by punctuation');
-
-    await expectProgramInList(page, programName);
-    await expectProgramInList(page, punctuatedName);
-  });
-
-  test('TC-017: Markup in Program Name is stored as text and is not executed', async ({ page }) => {
-    const programName = `<script>alert("xss")</script> ${uniqueSuffix()}`;
-    let alertSeen = false;
-    page.on('dialog', async (dialog) => {
-      if (dialog.type() === 'alert') {
-        alertSeen = true;
-        await dialog.dismiss();
-      }
+      trackProgram(await programs.createProgram(programName, description));
+      await expect(programs.programRow(programName)).toContainText(description);
+      const stored = await programs.readProgramFields(programName);
+      expect(stored.name).toBe(programName);
     });
 
-    await createProgram(page, programName, 'Markup should be plain text');
+    test('TC-002: Leading and trailing spaces are trimmed from a valid program name', async ({ programs, trackProgram }) => {
+      const trimmedName = `Informatique & IA - Niveau 2 ${uniqueSuffix()}`;
+      const paddedName = `  ${trimmedName}  `;
+      const description = "Programme d'informatique et d'intelligence artificielle, niveau 2";
 
-    await expectProgramInList(page, programName);
-    expect(alertSeen).toBe(false);
+      trackProgram(await programs.createProgram(paddedName, description));
+      await expectProgramInList(programs, trimmedName);
+      await expectProgramNotInList(programs, paddedName);
+      const stored = await programs.readProgramFields(trimmedName);
+      expect(stored.name).toBe(trimmedName);
+    });
+
+    test('TC-003: Duplicate Description does not block a unique Program Name', async ({ programs, trackProgram }) => {
+      const suffix = uniqueSuffix();
+      const existingName = `Web Development 2026 ${suffix}`;
+      const newName = `Data Analytics 2026 ${suffix}`;
+      const description = 'Full-stack web development program';
+
+      trackProgram(await programs.createProgram(existingName, description));
+      trackProgram(await programs.createProgram(newName, description));
+
+      await expectProgramInList(programs, existingName);
+      await expectProgramInList(programs, newName);
+    });
   });
 
-  test('TC-018: Accented characters in Program Name are preserved', async ({ page }) => {
-    const programName = `Développement & IA - Niveau 2 ${uniqueSuffix()}`;
+  test.describe('Negative flows', () => {
+    test('TC-004: Reject program name with only whitespace', async ({ programs }) => {
+      await programs.openAndFillNewProgram('   ', 'Full-stack web development program');
+      await expect(programs.newProgramCreateButton).toBeDisabled();
+    });
 
-    await createProgram(page, programName, 'Programme avec caractères accentués');
+    test('TC-005: Empty program name is not submitted', async ({ programs }) => {
+      const before = await programs.programRowCount();
 
-    const stored = await readProgramFields(page, programName);
-    expect(stored.name).toBe(programName);
-    await expectProgramNotInList(page, programName.replace('é', 'e'));
+      await programs.openNewProgramForm();
+      await programs.fillNewProgramDescription('Full-stack web development program');
+
+      await expect(programs.newProgramNameField).toHaveValue('');
+      await expect(programs.newProgramCreateButton).toBeDisabled();
+      await expect.poll(async () => programs.programRowCount()).toBe(before);
+    });
+
+    test('TC-006: Reject duplicate program name', async ({ programs, trackProgram }) => {
+      const programName = `Web Development 2026 ${uniqueSuffix()}`;
+      trackProgram(await programs.createProgram(programName, 'Full-stack web development program'));
+
+      await expectDuplicateNameNotAdded(programs, trackProgram, programName, 'Another full-stack cohort');
+      await expectProgramCount(programs, programName, 1);
+    });
+
+    test('TC-007: Trimmed program name is checked for duplicates', async ({ programs, trackProgram }) => {
+      const programName = `Web Development 2026 ${uniqueSuffix()}`;
+      trackProgram(await programs.createProgram(programName, 'Full-stack web development program'));
+
+      await expectDuplicateNameNotAdded(
+        programs,
+        trackProgram,
+        `  ${programName}  `,
+        'Another full-stack cohort',
+        programName,
+      );
+      await expectProgramCount(programs, programName, 1);
+    });
+
+    test('TC-008: Program names are unique regardless of letter case', async ({ programs, trackProgram }) => {
+      const programName = `Web Development 2026 ${uniqueSuffix()}`;
+      const caseVariant = programName.toLowerCase();
+      trackProgram(await programs.createProgram(programName, 'Full-stack web development program'));
+
+      await expectDuplicateNameNotAdded(programs, trackProgram, caseVariant, 'Case-variant duplicate');
+      await expect.poll(async () => programs.totalRowsForNames(programName, caseVariant), {
+        timeout: 15_000,
+      }).toBeLessThanOrEqual(1);
+    });
+
+    test('TC-009: A tab-only program name is treated as empty', async ({ programs }) => {
+      await programs.openNewProgramForm();
+      await programs.fillNewProgram('\t', 'Full-stack web development program');
+
+      await expect(programs.newProgramNameField).toHaveValue('\t');
+      await expect(programs.newProgramCreateButton).toBeDisabled();
+    });
+
+    test('TC-010: A rejected duplicate leaves the existing program unchanged', async ({ programs, trackProgram }) => {
+      const programName = `Web Development 2026 ${uniqueSuffix()}`;
+      const originalDescription = 'Full-stack web development program';
+      trackProgram(await programs.createProgram(programName, originalDescription));
+
+      await expectDuplicateNameNotAdded(
+        programs,
+        trackProgram,
+        programName,
+        'This description must not replace the original',
+      );
+
+      await expectProgramCount(programs, programName, 1);
+      const stored = await programs.readProgramFields(programName, originalDescription);
+      expect(stored.description).toBe(originalDescription);
+    });
+  });
+
+  test.describe('Edge cases', () => {
+    test('TC-011: Minimum-length program name is accepted', async ({ programs, trackProgram }) => {
+      const programName = `A${uniqueSuffix()}`;
+      const description = 'Single-letter program name';
+
+      trackProgram(await programs.createProgram(programName, description));
+      await expect(programs.programRow(programName)).toContainText(description);
+    });
+
+    test('TC-012: Spaces around a real character are trimmed', async ({ programs, trackProgram }) => {
+      const trimmedName = `A${uniqueSuffix()}`;
+      const description = 'Trimmed single character';
+
+      trackProgram(await programs.createProgram(`   ${trimmedName}   `, description));
+      await expectProgramInList(programs, trimmedName);
+      const stored = await programs.readProgramFields(trimmedName);
+      expect(stored.name).toBe(trimmedName);
+    });
+
+    test('TC-013: Program Name at 255 characters is accepted', async ({ programs, trackProgram }) => {
+      const programName = textOfLength(255, `Informatique & IA - Niveau 2 ${uniqueSuffix()} `);
+      const description = 'Boundary length name';
+
+      await programs.openAndFillNewProgram(programName, description);
+      await expect(programs.newProgramNameField).toHaveValue(programName);
+      await expect(programs.newProgramCreateButton).toBeEnabled();
+      trackProgram(await programs.submitCreateProgram());
+      await expectProgramInList(programs, programName);
+    });
+
+    test('TC-014: Program Name over 255 characters is rejected', async ({ programs }) => {
+      const programName = textOfLength(256, `Informatique & IA - Niveau 2 ${uniqueSuffix()} `);
+
+      await programs.openAndFillNewProgram(programName, 'Over max length name');
+
+      const createDisabled = await programs.isCreateProgramDisabled();
+      const hasMaxLengthMessage = await programs.maxLengthValidationMessage.isVisible().catch(() => false);
+
+      if (createDisabled || hasMaxLengthMessage) {
+        await expect(programs.newProgramCreateButton).toBeDisabled();
+        await expect(programs.maxLengthValidationMessage.or(programs.newProgramCreateButton)).toBeVisible();
+        return;
+      }
+
+      await programs.clickCreateOnNewProgram();
+      await expectProgramNotInList(programs, programName);
+    });
+
+    test('TC-015: Punctuation beyond ampersand and hyphen is accepted', async ({ programs, trackProgram }) => {
+      const programName = `C++ / .NET (Cohort #1) ${uniqueSuffix()}`;
+
+      trackProgram(await programs.createProgram(programName, 'Systems programming with C++ and .NET'));
+      const stored = await programs.readProgramFields(programName);
+      expect(stored.name).toBe(programName);
+    });
+
+    test('TC-016: A punctuation difference is not a duplicate', async ({ programs, trackProgram }) => {
+      const programName = `Web Development 2026 ${uniqueSuffix()}`;
+      const punctuatedName = `${programName}!`;
+
+      trackProgram(await programs.createProgram(programName, 'Full-stack web development program'));
+      trackProgram(await programs.createProgram(punctuatedName, 'Name differs by punctuation'));
+
+      await expectProgramInList(programs, programName);
+      await expectProgramInList(programs, punctuatedName);
+    });
+
+    test('TC-017: Markup in Program Name is not executed', async ({ page, programs, trackProgram }) => {
+      const programName = `<script>alert("xss")</script> ${uniqueSuffix()}`;
+      let alertSeen = false;
+      page.on('dialog', async (dialog) => {
+        if (dialog.type() === 'alert') {
+          alertSeen = true;
+          await dialog.dismiss();
+        }
+      });
+
+      trackProgram(await programs.createProgram(programName, 'Markup should be plain text'));
+      await expectProgramInList(programs, programName);
+      expect(alertSeen).toBe(false);
+    });
+
+    test('TC-018: Accented characters are preserved in Program Name', async ({ programs, trackProgram }) => {
+      const programName = `Développement & IA - Niveau 2 ${uniqueSuffix()}`;
+
+      trackProgram(await programs.createProgram(programName, 'Programme avec caractères accentués'));
+      const stored = await programs.readProgramFields(programName);
+      expect(stored.name).toBe(programName);
+      await expectProgramNotInList(programs, programName.replace('é', 'e'));
+    });
   });
 });

@@ -1,141 +1,134 @@
 import { expect, test } from '@playwright/test';
+import type { ProgramsPage } from '../pages/ProgramsPage';
 import {
-  confirmDelete,
-  createProgram,
   deleteConfirmMessage,
-  dismissDeleteDialog,
-  emptyProgramsMessage,
   expectProgramInList,
   expectProgramNotInList,
   gotoPrograms,
   login,
   loginAsAdmin,
-  openNewProgramModal,
-  programNameField,
-  programRowByName,
-  programRowByNameAndDescription,
-  programRowCount,
-  readProgramFields,
   skipWithoutAdminCredentials,
-  submitCreateProgram,
   textOfLength,
   uniqueSuffix,
-  descriptionField,
 } from './helpers/didaxis-programs';
 
 test.describe.configure({ mode: 'serial', timeout: 120_000 });
 
 test.describe('Positive flows', () => {
+  let programs: ProgramsPage;
+
   test.beforeEach(async ({ page }) => {
     skipWithoutAdminCredentials();
     await loginAsAdmin(page);
-    await gotoPrograms(page);
+    programs = await gotoPrograms(page);
   });
 
-  test('TC-001: The confirmation names the program and does not remove it yet', async ({ page }) => {
+  test('TC-001: The confirmation names the program and does not remove it yet', async () => {
     const suffix = uniqueSuffix();
     const programName = `Test Program ${suffix}`;
     const otherName = `Web Development 2026 ${suffix}`;
-    await createProgram(page, programName, 'Temporary program used for deletion checks');
-    await createProgram(page, otherName, 'Full-stack web development program');
+    await programs.createProgram(programName, 'Temporary program used for deletion checks');
+    await programs.createProgram(otherName, 'Full-stack web development program');
 
-    const message = await dismissDeleteDialog(page, programName);
+    const message = await programs.dismissDeleteDialog(programName);
 
     expect(message).toBe(deleteConfirmMessage(programName));
-    await expectProgramInList(page, programName);
-    await expectProgramInList(page, otherName);
+    await expectProgramInList(programs, programName);
+    await expectProgramInList(programs, otherName);
   });
 
-  test('TC-002: Confirming deletion removes the program from the list', async ({ page }) => {
+  test('TC-002: Confirming deletion removes the program from the list', async () => {
     const programName = `Test Program ${uniqueSuffix()}`;
-    await createProgram(page, programName, 'Temporary program used for deletion checks');
+    await programs.createProgram(programName, 'Temporary program used for deletion checks');
 
-    await confirmDelete(page, programName);
+    await programs.confirmDelete(programName);
 
-    await expectProgramNotInList(page, programName);
+    await expectProgramNotInList(programs, programName);
   });
 
-  test('TC-003: Cancelling the dialog leaves the program in the list', async ({ page }) => {
+  test('TC-003: Cancelling the dialog leaves the program in the list', async () => {
     const programName = `Test Program ${uniqueSuffix()}`;
     const description = 'Temporary program used for deletion checks';
-    await createProgram(page, programName, description);
+    await programs.createProgram(programName, description);
 
-    await dismissDeleteDialog(page, programName);
+    await programs.dismissDeleteDialog(programName);
 
-    await expectProgramInList(page, programName);
-    const stored = await readProgramFields(page, programName);
+    await expectProgramInList(programs, programName);
+    const stored = await programs.readProgramFields(programName);
     expect(stored.description).toBe(description);
   });
 
-  test('TC-004: Deleting one program leaves the other program in the list', async ({ page }) => {
+  test('TC-004: Deleting one program leaves the other program in the list', async () => {
     const suffix = uniqueSuffix();
     const programName = `Test Program ${suffix}`;
     const otherName = `Web Development 2026 ${suffix}`;
     const otherDescription = 'Full-stack web development program';
-    await createProgram(page, programName, 'Temporary program used for deletion checks');
-    await createProgram(page, otherName, otherDescription);
+    await programs.createProgram(programName, 'Temporary program used for deletion checks');
+    await programs.createProgram(otherName, otherDescription);
 
-    await confirmDelete(page, programName);
+    await programs.confirmDelete(programName);
 
-    await expectProgramNotInList(page, programName);
-    await expectProgramInList(page, otherName);
-    const stored = await readProgramFields(page, otherName);
+    await expectProgramNotInList(programs, programName);
+    await expectProgramInList(programs, otherName);
+    const stored = await programs.readProgramFields(otherName);
     expect(stored.description).toBe(otherDescription);
   });
 });
 
 test.describe('Negative flows', () => {
+  let programs: ProgramsPage;
+
   test.beforeEach(async ({ page }) => {
     skipWithoutAdminCredentials();
     await loginAsAdmin(page);
-    await gotoPrograms(page);
+    programs = await gotoPrograms(page);
   });
 
-  test('TC-005: The delete icon alone does not remove the program', async ({ page }) => {
+  test('TC-005: The delete icon alone does not remove the program', async () => {
     const programName = `Test Program ${uniqueSuffix()}`;
-    await createProgram(page, programName, 'Temporary program used for deletion checks');
+    await programs.createProgram(programName, 'Temporary program used for deletion checks');
 
-    await dismissDeleteDialog(page, programName);
+    await programs.dismissDeleteDialog(programName);
 
-    await expectProgramInList(page, programName);
+    await expectProgramInList(programs, programName);
   });
 
-  test('TC-006: Dismissing the confirmation keeps the program', async ({ page }) => {
+  test('TC-006: Dismissing the confirmation keeps the program', async () => {
     const programName = `Test Program ${uniqueSuffix()}`;
-    await createProgram(page, programName, 'Temporary program used for deletion checks');
+    await programs.createProgram(programName, 'Temporary program used for deletion checks');
 
-    await dismissDeleteDialog(page, programName);
-    await expectProgramInList(page, programName);
+    await programs.dismissDeleteDialog(programName);
+    await expectProgramInList(programs, programName);
 
-    await dismissDeleteDialog(page, programName);
-    await expectProgramInList(page, programName);
+    await programs.dismissDeleteDialog(programName);
+    await expectProgramInList(programs, programName);
   });
 
-  test('TC-008: Cancelling one program does not remove another', async ({ page }) => {
+  test('TC-008: Cancelling one program does not remove another', async () => {
     const suffix = uniqueSuffix();
     const programName = `Test Program ${suffix}`;
     const otherName = `Web Development 2026 ${suffix}`;
-    await createProgram(page, programName, 'Temporary program used for deletion checks');
-    await createProgram(page, otherName, 'Full-stack web development program');
+    await programs.createProgram(programName, 'Temporary program used for deletion checks');
+    await programs.createProgram(otherName, 'Full-stack web development program');
 
-    await dismissDeleteDialog(page, otherName);
+    await programs.dismissDeleteDialog(otherName);
 
-    await expectProgramInList(page, otherName);
-    await expectProgramInList(page, programName);
+    await expectProgramInList(programs, otherName);
+    await expectProgramInList(programs, programName);
   });
 
-  test('TC-009: A confirmed delete is still gone after refresh', async ({ page }) => {
+  test('TC-009: A confirmed delete is still gone after refresh', async () => {
     const suffix = uniqueSuffix();
     const programName = `Test Program ${suffix}`;
     const otherName = `Web Development 2026 ${suffix}`;
-    await createProgram(page, programName, 'Temporary program used for deletion checks');
-    await createProgram(page, otherName, 'Full-stack web development program');
+    await programs.createProgram(programName, 'Temporary program used for deletion checks');
+    await programs.createProgram(otherName, 'Full-stack web development program');
 
-    await confirmDelete(page, programName);
-    await gotoPrograms(page);
+    await programs.confirmDelete(programName);
+    await programs.goto();
 
-    await expectProgramNotInList(page, programName);
-    await expectProgramInList(page, otherName);
+    await expectProgramNotInList(programs, programName);
+    await expectProgramInList(programs, otherName);
   });
 });
 
@@ -150,107 +143,109 @@ test.describe('Non-admin access', () => {
 
     const programName = `Test Program ${uniqueSuffix()}`;
     await loginAsAdmin(page);
-    await gotoPrograms(page);
-    await createProgram(page, programName, 'Temporary program used for deletion checks');
+    let programs = await gotoPrograms(page);
+    await programs.createProgram(programName, 'Temporary program used for deletion checks');
 
     await login(page, email, password);
-    await gotoPrograms(page);
+    programs = await gotoPrograms(page);
 
-    const row = programRowByName(page, programName).first();
+    const row = programs.programRow(programName).first();
     await row.scrollIntoViewIfNeeded();
-    await expect(row.getByRole('button', { name: `Delete ${programName}`, exact: true })).toHaveCount(0);
-    await expectProgramInList(page, programName);
+    await expect(programs.deleteButtonForProgram(programName)).toHaveCount(0);
+    await expectProgramInList(programs, programName);
   });
 });
 
 test.describe('Edge cases', () => {
+  let programs: ProgramsPage;
+
   test.beforeEach(async ({ page }) => {
     skipWithoutAdminCredentials();
     await loginAsAdmin(page);
-    await gotoPrograms(page);
+    programs = await gotoPrograms(page);
   });
 
-  test('TC-010: The dialog names a special-character program and only that program is removed', async ({ page }) => {
+  test('TC-010: The dialog names a special-character program and only that program is removed', async () => {
     const suffix = uniqueSuffix();
     const programName = `Informatique & IA - Niveau 2 ${suffix}`;
     const otherName = `Test Program ${suffix}`;
-    await createProgram(page, programName, "Programme d'informatique et d'intelligence artificielle, niveau 2");
-    await createProgram(page, otherName, 'Temporary program used for deletion checks');
+    await programs.createProgram(programName, "Programme d'informatique et d'intelligence artificielle, niveau 2");
+    await programs.createProgram(otherName, 'Temporary program used for deletion checks');
 
-    const message = await confirmDelete(page, programName);
+    const message = await programs.confirmDelete(programName);
 
     expect(message).toContain('Informatique & IA - Niveau 2');
-    await expectProgramNotInList(page, programName);
-    await expectProgramInList(page, otherName);
+    await expectProgramNotInList(programs, programName);
+    await expectProgramInList(programs, otherName);
   });
 
-  test('TC-011: Cancelling deletion of a special-character name keeps that exact name', async ({ page }) => {
+  test('TC-011: Cancelling deletion of a special-character name keeps that exact name', async () => {
     const programName = `Informatique & IA - Niveau 2 ${uniqueSuffix()}`;
-    await createProgram(page, programName, "Programme d'informatique et d'intelligence artificielle, niveau 2");
+    await programs.createProgram(programName, "Programme d'informatique et d'intelligence artificielle, niveau 2");
 
-    await dismissDeleteDialog(page, programName);
+    await programs.dismissDeleteDialog(programName);
 
-    await expectProgramInList(page, programName);
+    await expectProgramInList(programs, programName);
   });
 
-  test('TC-012: A short program name can be deleted after confirmation', async ({ page }) => {
+  test('TC-012: A short program name can be deleted after confirmation', async () => {
     const suffix = uniqueSuffix();
     const programName = `A${suffix}`;
     const otherName = `Test Program ${suffix}`;
-    await createProgram(page, programName, 'Single-letter program name');
-    await createProgram(page, otherName, 'Temporary program used for deletion checks');
+    await programs.createProgram(programName, 'Single-letter program name');
+    await programs.createProgram(otherName, 'Temporary program used for deletion checks');
 
-    const message = await confirmDelete(page, programName);
+    const message = await programs.confirmDelete(programName);
 
     expect(message).toContain(programName);
-    await expectProgramNotInList(page, programName);
-    await expectProgramInList(page, otherName);
+    await expectProgramNotInList(programs, programName);
+    await expectProgramInList(programs, otherName);
   });
 
-  test('TC-013: A 255-character Program Name is shown in the dialog and removed', async ({ page }) => {
+  test('TC-013: A 255-character Program Name is shown in the dialog and removed', async () => {
     const suffix = uniqueSuffix();
     const programName = textOfLength(255, `Test Program ${suffix} `);
     const otherName = `Web Development 2026 ${suffix}`;
-    await createProgram(page, programName, 'Boundary length program name');
-    await createProgram(page, otherName, 'Full-stack web development program');
+    await programs.createProgram(programName, 'Boundary length program name');
+    await programs.createProgram(otherName, 'Full-stack web development program');
 
-    const message = await confirmDelete(page, programName);
+    const message = await programs.confirmDelete(programName);
 
     expect(message).toContain(programName);
-    await expectProgramNotInList(page, programName);
-    await expectProgramInList(page, otherName);
+    await expectProgramNotInList(programs, programName);
+    await expectProgramInList(programs, otherName);
   });
 
-  test('TC-014: Deleting the only program leaves the list empty', async ({ page }) => {
-    const existing = await programRowCount(page);
+  test('TC-014: Deleting the only program leaves the list empty', async () => {
+    const existing = await programs.programRowCount();
     test.skip(
       existing > 0,
       'Skipped: the shared Programs catalog is not empty, and clearing it would delete every program.',
     );
 
     const programName = `Test Program ${uniqueSuffix()}`;
-    await createProgram(page, programName, 'Temporary program used for deletion checks');
-    await confirmDelete(page, programName);
+    await programs.createProgram(programName, 'Temporary program used for deletion checks');
+    await programs.confirmDelete(programName);
 
-    await expect(page.getByText(emptyProgramsMessage)).toBeVisible();
-    await expect(programRowByName(page, programName)).toHaveCount(0);
+    await expect(programs.emptyProgramsText).toBeVisible();
+    await expect(programs.programRow(programName)).toHaveCount(0);
   });
 
-  test('TC-015: Only the chosen row is removed when two programs share a name', async ({ page }) => {
+  test('TC-015: Only the chosen row is removed when two programs share a name', async () => {
     const programName = `Test Program ${uniqueSuffix()}`;
     const morning = 'Morning cohort';
     const evening = 'Evening cohort';
-    await createProgram(page, programName, morning);
-    await openNewProgramModal(page);
-    await programNameField(page).fill(programName);
-    await descriptionField(page).fill(evening);
-    await submitCreateProgram(page);
-    await expect(programRowByNameAndDescription(page, programName, evening)).toHaveCount(1);
+    await programs.createProgram(programName, morning);
+    await programs.openNewProgramForm();
+    await programs.newProgramModal.fillProgramName(programName);
+    await programs.newProgramModal.fillDescription(evening);
+    await programs.submitCreateProgram();
+    await expect(programs.programRowWithDescription(programName, evening)).toHaveCount(1);
 
-    await confirmDelete(page, programName, evening);
+    await programs.confirmDelete(programName, evening);
 
-    await expect(programRowByNameAndDescription(page, programName, evening)).toHaveCount(0);
-    await expect(programRowByNameAndDescription(page, programName, morning)).toHaveCount(1);
+    await expect(programs.programRowWithDescription(programName, evening)).toHaveCount(0);
+    await expect(programs.programRowWithDescription(programName, morning)).toHaveCount(1);
   });
 
   test('TC-016: Markup in the program name is shown as text in the dialog', async ({ page }) => {
@@ -265,46 +260,46 @@ test.describe('Edge cases', () => {
       }
     };
     page.on('dialog', trackAlerts);
-    await createProgram(page, programName, 'Markup should be plain text');
-    await createProgram(page, otherName, 'Temporary program used for deletion checks');
+    await programs.createProgram(programName, 'Markup should be plain text');
+    await programs.createProgram(otherName, 'Temporary program used for deletion checks');
     page.off('dialog', trackAlerts);
 
-    const message = await confirmDelete(page, programName);
+    const message = await programs.confirmDelete(programName);
 
     expect(message).toContain(programName);
     expect(alertSeen).toBe(false);
-    await expectProgramNotInList(page, programName);
-    await expectProgramInList(page, otherName);
+    await expectProgramNotInList(programs, programName);
+    await expectProgramInList(programs, otherName);
   });
 
-  test('TC-017: Cancel, then a later confirm, removes the program', async ({ page }) => {
+  test('TC-017: Cancel, then a later confirm, removes the program', async () => {
     const programName = `Test Program ${uniqueSuffix()}`;
-    await createProgram(page, programName, 'Temporary program used for deletion checks');
+    await programs.createProgram(programName, 'Temporary program used for deletion checks');
 
-    await dismissDeleteDialog(page, programName);
-    await expectProgramInList(page, programName);
+    await programs.dismissDeleteDialog(programName);
+    await expectProgramInList(programs, programName);
 
-    await confirmDelete(page, programName);
-    await expectProgramNotInList(page, programName);
+    await programs.confirmDelete(programName);
+    await expectProgramNotInList(programs, programName);
   });
 
-  test('TC-018: A whitespace-padded name is stored trimmed, then that program can be deleted', async ({ page }) => {
+  test('TC-018: A whitespace-padded name is stored trimmed, then that program can be deleted', async () => {
     const suffix = uniqueSuffix();
     const trimmedName = `Test Program ${suffix}`;
     const otherName = `Web Development 2026 ${suffix}`;
-    await createProgram(page, otherName, 'Full-stack web development program');
+    await programs.createProgram(otherName, 'Full-stack web development program');
 
-    await openNewProgramModal(page);
-    await programNameField(page).fill(`  ${trimmedName}  `);
-    await descriptionField(page).fill('Padded name');
-    await submitCreateProgram(page);
+    await programs.openNewProgramForm();
+    await programs.newProgramModal.fillProgramName(`  ${trimmedName}  `);
+    await programs.newProgramModal.fillDescription('Padded name');
+    await programs.submitCreateProgram();
 
-    await expectProgramInList(page, trimmedName);
-    const stored = await readProgramFields(page, trimmedName);
+    await expectProgramInList(programs, trimmedName);
+    const stored = await programs.readProgramFields(trimmedName);
     expect(stored.name).toBe(trimmedName);
 
-    await confirmDelete(page, trimmedName);
-    await expectProgramNotInList(page, trimmedName);
-    await expectProgramInList(page, otherName);
+    await programs.confirmDelete(trimmedName);
+    await expectProgramNotInList(programs, trimmedName);
+    await expectProgramInList(programs, otherName);
   });
 });

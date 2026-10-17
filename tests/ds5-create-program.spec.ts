@@ -1,27 +1,12 @@
 import { expect, test } from '@playwright/test';
+import type { ProgramsPage } from '../pages/ProgramsPage';
 import {
-  confirmDelete,
-  createButton,
-  createProgram,
-  createProgramModal,
   description1000,
-  descriptionField,
-  emptyProgramsMessage,
   expectProgramInList,
   expectProgramNotInList,
   gotoPrograms,
-  listedDescription,
   loginAsAdmin,
-  openNewProgramModal,
-  openNewProgramTrigger,
-  programListTable,
-  programNameField,
-  programRowByName,
-  programRowByNameAndDescription,
-  programRowCount,
-  readProgramFields,
   skipWithoutAdminCredentials,
-  submitCreateProgram,
   textOfLength,
   uniqueSuffix,
 } from './helpers/didaxis-programs';
@@ -29,133 +14,137 @@ import {
 test.describe.configure({ mode: 'serial', timeout: 120_000 });
 
 test.describe('Positive flows', () => {
+  let programs: ProgramsPage;
+
   test.beforeEach(async ({ page }) => {
     skipWithoutAdminCredentials();
     await loginAsAdmin(page);
-    await gotoPrograms(page);
+    programs = await gotoPrograms(page);
   });
 
-  test("TC-001: The Programs page lists each program's Name and Description", async ({ page }) => {
+  test("TC-001: The Programs page lists each program's Name and Description", async () => {
     const suffix = uniqueSuffix();
     const webName = `Web Development 2026 ${suffix}`;
     const webDescription = 'Full-stack web development program';
     const testName = `Test Program ${suffix}`;
     const testDescription = 'Temporary program used for deletion checks';
-    await createProgram(page, webName, webDescription);
-    await createProgram(page, testName, testDescription);
+    await programs.createProgram(webName, webDescription);
+    await programs.createProgram(testName, testDescription);
 
-    const webRow = programRowByName(page, webName).first();
-    const testRow = programRowByName(page, testName).first();
+    const webRow = programs.programRow(webName).first();
+    const testRow = programs.programRow(testName).first();
     await expect(webRow).toContainText(webName);
     await expect(webRow).toContainText(webDescription);
     await expect(testRow).toContainText(testName);
     await expect(testRow).toContainText(testDescription);
   });
 
-  test('TC-002: An empty Programs page shows a no-programs message and a create prompt', async ({ page }) => {
+  test('TC-002: An empty Programs page shows a no-programs message and a create prompt', async () => {
     test.skip(
-      (await programRowCount(page)) > 0,
+      (await programs.programRowCount()) > 0,
       'Skipped: the shared Programs catalog is not empty, and clearing it would delete every program.',
     );
 
-    await expect(page.getByText(emptyProgramsMessage)).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Create Program' })).toBeVisible();
-    await expect(programListTable(page)).toHaveCount(0);
+    await expect(programs.emptyProgramsText).toBeVisible();
+    await expect(programs.createProgramButton).toBeVisible();
+    await expect(programs.programTable).toHaveCount(0);
   });
 
-  test('TC-003: A program is shown with its Name and Description', async ({ page }) => {
+  test('TC-003: A program is shown with its Name and Description', async () => {
     const programName = `Web Development 2026 ${uniqueSuffix()}`;
     const description = 'Full-stack web development program';
-    await createProgram(page, programName, description);
+    await programs.createProgram(programName, description);
 
-    const row = programRowByName(page, programName).first();
+    const row = programs.programRow(programName).first();
     await expect(row).toContainText(programName);
     await expect(row).toContainText(description);
-    await expect(page.getByText(emptyProgramsMessage)).toHaveCount(0);
+    await expect(programs.emptyProgramsText).toHaveCount(0);
   });
 
-  test('TC-004: Creating the first program replaces the empty state with that program', async ({ page }) => {
+  test('TC-004: Creating the first program replaces the empty state with that program', async () => {
     test.skip(
-      (await programRowCount(page)) > 0,
+      (await programs.programRowCount()) > 0,
       'Skipped: the shared Programs catalog is not empty, so the first-program transition cannot be observed.',
     );
 
     const programName = `Web Development 2026 ${uniqueSuffix()}`;
     const description = 'Full-stack web development program';
-    await expect(page.getByText(emptyProgramsMessage)).toBeVisible();
-    await page.getByRole('button', { name: 'Create Program' }).click();
-    await expect(createProgramModal(page)).toBeVisible();
-    await programNameField(page).fill(programName);
-    await descriptionField(page).fill(description);
-    await submitCreateProgram(page);
+    await expect(programs.emptyProgramsText).toBeVisible();
+    await programs.createProgramButton.click();
+    await expect(programs.newProgramModal.dialog).toBeVisible();
+    await programs.newProgramModal.fillProgramName(programName);
+    await programs.newProgramModal.fillDescription(description);
+    await programs.submitCreateProgram();
 
-    await expectProgramInList(page, programName);
-    await expect(programRowByName(page, programName).first()).toContainText(description);
-    await expect(page.getByText(emptyProgramsMessage)).toHaveCount(0);
+    await expectProgramInList(programs, programName);
+    await expect(programs.programRow(programName).first()).toContainText(description);
+    await expect(programs.emptyProgramsText).toHaveCount(0);
   });
 });
 
 test.describe('Negative flows', () => {
+  let programs: ProgramsPage;
+
   test.beforeEach(async ({ page }) => {
     skipWithoutAdminCredentials();
     await loginAsAdmin(page);
-    await gotoPrograms(page);
+    programs = await gotoPrograms(page);
   });
 
-  test('TC-005: Programs that exist are not hidden behind the empty state', async ({ page }) => {
+  test('TC-005: Programs that exist are not hidden behind the empty state', async () => {
     const programName = `Web Development 2026 ${uniqueSuffix()}`;
     const description = 'Full-stack web development program';
-    await createProgram(page, programName, description);
+    await programs.createProgram(programName, description);
 
-    await expect(programRowByName(page, programName).first()).toContainText(description);
-    await expect(page.getByText(emptyProgramsMessage)).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Create Program' })).toHaveCount(0);
-    await expect(openNewProgramTrigger(page)).toBeVisible();
+    await expect(programs.programRow(programName).first()).toContainText(description);
+    await expect(programs.emptyProgramsText).toHaveCount(0);
+    await expect(programs.createProgramButton).toHaveCount(0);
+    await expect(programs.openNewProgramTrigger).toBeVisible();
   });
 
-  test('TC-006: The empty state does not invent a program row', async ({ page }) => {
+  test('TC-006: The empty state does not invent a program row', async () => {
     test.skip(
-      (await programRowCount(page)) > 0,
+      (await programs.programRowCount()) > 0,
       'Skipped: the shared Programs catalog is not empty, and clearing it would delete every program.',
     );
 
-    await expect(page.getByText(emptyProgramsMessage)).toBeVisible();
-    await expect(page.getByText('Web Development 2026', { exact: true })).toHaveCount(0);
-    await expect(page.getByText('Test Program', { exact: true })).toHaveCount(0);
-    await expect(page.getByText('Informatique & IA - Niveau 2', { exact: true })).toHaveCount(0);
+    await expect(programs.emptyProgramsText).toBeVisible();
+    await expect(programs.exactText('Web Development 2026')).toHaveCount(0);
+    await expect(programs.exactText('Test Program')).toHaveCount(0);
+    await expect(programs.exactText('Informatique & IA - Niveau 2')).toHaveCount(0);
   });
 
-  test("TC-007: One program's Description is not shown on another program", async ({ page }) => {
+  test("TC-007: One program's Description is not shown on another program", async () => {
     const suffix = uniqueSuffix();
     const webName = `Web Development 2026 ${suffix}`;
     const webDescription = 'Full-stack web development program';
     const testName = `Test Program ${suffix}`;
     const testDescription = 'Temporary program used for deletion checks';
-    await createProgram(page, webName, webDescription);
-    await createProgram(page, testName, testDescription);
+    await programs.createProgram(webName, webDescription);
+    await programs.createProgram(testName, testDescription);
 
-    const webRow = programRowByName(page, webName).first();
-    const testRow = programRowByName(page, testName).first();
+    const webRow = programs.programRow(webName).first();
+    const testRow = programs.programRow(testName).first();
     await expect(webRow).toContainText(webDescription);
     await expect(webRow).not.toContainText(testDescription);
     await expect(testRow).toContainText(testDescription);
     await expect(testRow).not.toContainText(webDescription);
   });
 
-  test('TC-008: A deleted program is absent from the list', async ({ page }) => {
+  test('TC-008: A deleted program is absent from the list', async () => {
     const suffix = uniqueSuffix();
     const deletedName = `Test Program ${suffix}`;
     const webName = `Web Development 2026 ${suffix}`;
     const webDescription = 'Full-stack web development program';
-    await createProgram(page, deletedName, 'Temporary program used for deletion checks');
-    await createProgram(page, webName, webDescription);
+    await programs.createProgram(deletedName, 'Temporary program used for deletion checks');
+    await programs.createProgram(webName, webDescription);
 
-    await confirmDelete(page, deletedName);
-    await gotoPrograms(page);
+    await programs.confirmDelete(deletedName);
+    await programs.goto();
 
-    await expectProgramNotInList(page, deletedName);
-    await expect(programRowByName(page, webName).first()).toContainText(webDescription);
-    await expect(page.getByText(emptyProgramsMessage)).toHaveCount(0);
+    await expectProgramNotInList(programs, deletedName);
+    await expect(programs.programRow(webName).first()).toContainText(webDescription);
+    await expect(programs.emptyProgramsText).toHaveCount(0);
   });
 
   test('TC-009: Markup in Name or Description is shown as text', async ({ page }) => {
@@ -169,14 +158,14 @@ test.describe('Negative flows', () => {
       }
     });
 
-    await createProgram(page, programName, description);
+    await programs.createProgram(programName, description);
 
-    await expectProgramInList(page, programName);
-    await expect(programRowByName(page, programName).first()).toContainText(description);
+    await expectProgramInList(programs, programName);
+    await expect(programs.programRow(programName).first()).toContainText(description);
     expect(alertSeen).toBe(false);
   });
 
-  test('TC-010: The list does not drop a program when no filter is applied', async ({ page }) => {
+  test('TC-010: The list does not drop a program when no filter is applied', async () => {
     const suffix = uniqueSuffix();
     const webName = `Web Development 2026 ${suffix}`;
     const webDescription = 'Full-stack web development program';
@@ -184,143 +173,143 @@ test.describe('Negative flows', () => {
     const testDescription = 'Temporary program used for deletion checks';
     const infoName = `Informatique & IA - Niveau 2 ${suffix}`;
     const infoDescription = "Programme d'informatique et d'intelligence artificielle, niveau 2";
-    await createProgram(page, webName, webDescription);
-    await createProgram(page, testName, testDescription);
-    await createProgram(page, infoName, infoDescription);
+    await programs.createProgram(webName, webDescription);
+    await programs.createProgram(testName, testDescription);
+    await programs.createProgram(infoName, infoDescription);
 
-    await expect(page.getByRole('searchbox')).toHaveCount(0);
-    await expect(programRowByName(page, webName).first()).toContainText(webDescription);
-    await expect(programRowByName(page, testName).first()).toContainText(testDescription);
-    await expect(programRowByName(page, infoName).first()).toContainText(infoDescription);
+    await expect(programs.searchBox).toHaveCount(0);
+    await expect(programs.programRow(webName).first()).toContainText(webDescription);
+    await expect(programs.programRow(testName).first()).toContainText(testDescription);
+    await expect(programs.programRow(infoName).first()).toContainText(infoDescription);
   });
 });
 
 test.describe('Edge cases', () => {
+  let programs: ProgramsPage;
+
   test.beforeEach(async ({ page }) => {
     skipWithoutAdminCredentials();
     await loginAsAdmin(page);
-    await gotoPrograms(page);
+    programs = await gotoPrograms(page);
   });
 
-  test('TC-011: Special characters in Name and Description are shown as stored', async ({ page }) => {
+  test('TC-011: Special characters in Name and Description are shown as stored', async () => {
     const programName = `Informatique & IA - Niveau 2 ${uniqueSuffix()}`;
     const description = "Programme d'informatique et d'intelligence artificielle, niveau 2";
-    await createProgram(page, programName, description);
+    await programs.createProgram(programName, description);
 
-    const row = programRowByName(page, programName).first();
+    const row = programs.programRow(programName).first();
     await expect(row).toContainText(programName);
     await expect(row).toContainText(description);
-    const stored = await readProgramFields(page, programName);
+    const stored = await programs.readProgramFields(programName);
     expect(stored.name).toBe(programName);
     expect(stored.description).toBe(description);
   });
 
-  test('TC-012: A program with an empty Description is still listed', async ({ page }) => {
+  test('TC-012: A program with an empty Description is still listed', async () => {
     const suffix = uniqueSuffix();
     const emptyName = `Data Analytics 2026 ${suffix}`;
     const webName = `Web Development 2026 ${suffix}`;
     const webDescription = 'Full-stack web development program';
-    await createProgram(page, emptyName);
-    await createProgram(page, webName, webDescription);
+    await programs.createProgram(emptyName);
+    await programs.createProgram(webName, webDescription);
 
-    await expectProgramInList(page, emptyName);
-    expect((await listedDescription(page, emptyName)).trim()).toBe('');
-    await expect(programRowByName(page, webName).first()).toContainText(webDescription);
-    await expect(page.getByText(emptyProgramsMessage)).toHaveCount(0);
-    const stored = await readProgramFields(page, emptyName);
+    await expectProgramInList(programs, emptyName);
+    expect((await programs.listedDescription(emptyName)).trim()).toBe('');
+    await expect(programs.programRow(webName).first()).toContainText(webDescription);
+    await expect(programs.emptyProgramsText).toHaveCount(0);
+    const stored = await programs.readProgramFields(emptyName);
     expect(stored.description).toBe('');
   });
 
-  test('TC-013: A short Name is shown in full', async ({ page }) => {
+  test('TC-013: A short Name is shown in full', async () => {
     const programName = `A${uniqueSuffix()}`;
     const description = 'Single-letter program name';
-    await createProgram(page, programName, description);
+    await programs.createProgram(programName, description);
 
-    const row = programRowByName(page, programName).first();
+    const row = programs.programRow(programName).first();
     await expect(row).toContainText(programName);
     await expect(row).toContainText(description);
   });
 
-  test('TC-014: A 255-character Name and a 1000-character Description remain available', async ({ page }) => {
+  test('TC-014: A 255-character Name and a 1000-character Description remain available', async () => {
     const programName = textOfLength(255, `Web Development 2026 ${uniqueSuffix()} `);
     const description = description1000('Full-stack web development program ');
-    await createProgram(page, programName, description);
+    await programs.createProgram(programName, description);
 
-    const row = programRowByName(page, programName).first();
+    const row = programs.programRow(programName).first();
     await row.scrollIntoViewIfNeeded();
     await expect(row).toContainText(programName);
     await expect(row).toContainText(description.slice(0, 80));
-    const stored = await readProgramFields(page, programName);
+    const stored = await programs.readProgramFields(programName);
     expect(stored.name).toBe(programName);
     expect(stored.description).toBe(description);
   });
 
-  test('TC-015: Two programs with the same Name are both listed with their own Descriptions', async ({ page }) => {
+  test('TC-015: Two programs with the same Name are both listed with their own Descriptions', async () => {
     const programName = `Test Program ${uniqueSuffix()}`;
     const morning = 'Morning cohort';
     const evening = 'Evening cohort';
-    await createProgram(page, programName, morning);
+    await programs.createProgram(programName, morning);
 
-    await openNewProgramModal(page);
-    await programNameField(page).fill(programName);
-    await descriptionField(page).fill(evening);
-    await expect(createButton(page)).toBeEnabled();
-    await submitCreateProgram(page);
+    await programs.openNewProgramForm();
+    await programs.newProgramModal.fillProgramName(programName);
+    await programs.newProgramModal.fillDescription(evening);
+    await expect(programs.newProgramModal.createButton).toBeEnabled();
+    await programs.submitCreateProgram();
 
-    await expect(programRowByNameAndDescription(page, programName, morning)).toHaveCount(1);
-    await expect(programRowByNameAndDescription(page, programName, evening)).toHaveCount(1);
+    await expect(programs.programRowWithDescription(programName, morning)).toHaveCount(1);
+    await expect(programs.programRowWithDescription(programName, evening)).toHaveCount(1);
   });
 
-  test('TC-016: Surrounding spaces in a Name are not kept in the list', async ({ page }) => {
+  test('TC-016: Surrounding spaces in a Name are not kept in the list', async () => {
     const suffix = uniqueSuffix();
     const trimmedName = `Test Program ${suffix}`;
     const otherName = `Kept Program ${suffix}`;
     const otherDescription = 'Temporary program used for deletion checks';
-    await createProgram(page, otherName, otherDescription);
+    await programs.createProgram(otherName, otherDescription);
 
-    await openNewProgramModal(page);
-    await programNameField(page).fill(`  ${trimmedName}  `);
-    await descriptionField(page).fill('Padded name');
-    await submitCreateProgram(page);
+    await programs.openNewProgramForm();
+    await programs.newProgramModal.fillProgramName(`  ${trimmedName}  `);
+    await programs.newProgramModal.fillDescription('Padded name');
+    await programs.submitCreateProgram();
 
-    await expectProgramInList(page, trimmedName);
-    const stored = await readProgramFields(page, trimmedName);
+    await expectProgramInList(programs, trimmedName);
+    const stored = await programs.readProgramFields(trimmedName);
     expect(stored.name).toBe(trimmedName);
-    await expect(programRowByName(page, otherName).first()).toContainText(otherDescription);
+    await expect(programs.programRow(otherName).first()).toContainText(otherDescription);
   });
 
-  test('TC-017: A whitespace-only Description is shown as blank', async ({ page }) => {
+  test('TC-017: A whitespace-only Description is shown as blank', async () => {
     const programName = `Cloud Engineering 2026 ${uniqueSuffix()}`;
 
-    await openNewProgramModal(page);
-    await programNameField(page).fill(programName);
-    await descriptionField(page).fill('   ');
-    await submitCreateProgram(page);
-    await expectProgramInList(page, programName);
+    await programs.openNewProgramForm();
+    await programs.newProgramModal.fillProgramName(programName);
+    await programs.newProgramModal.fillDescription('   ');
+    await programs.submitCreateProgram();
+    await expectProgramInList(programs, programName);
 
-    expect((await listedDescription(page, programName)).trim()).toBe('');
-    await expect(programRowByName(page, programName).first()).not.toContainText('No programs yet');
-    const stored = await readProgramFields(page, programName);
+    expect((await programs.listedDescription(programName)).trim()).toBe('');
+    await expect(programs.programRow(programName).first()).not.toContainText('No programs yet');
+    const stored = await programs.readProgramFields(programName);
     expect(stored.description.trim()).toBe('');
   });
 
-  test('TC-018: Every program remains listed when the list is longer than one screen', async ({ page }) => {
+  test('TC-018: Every program remains listed when the list is longer than one screen', async () => {
     const suffix = uniqueSuffix();
     const webName = `Web Development 2026 ${suffix}`;
     const webDescription = 'Full-stack web development program';
     const testName = `Test Program ${suffix}`;
     const testDescription = 'Temporary program used for deletion checks';
-    await createProgram(page, webName, webDescription);
-    await createProgram(page, testName, testDescription);
+    await programs.createProgram(webName, webDescription);
+    await programs.createProgram(testName, testDescription);
 
-    const rows = programListTable(page).locator('tbody tr');
-    const count = await rows.count();
+    const count = await programs.scrollToLastTableRow();
     expect(count).toBeGreaterThanOrEqual(25);
-    await rows.nth(count - 1).scrollIntoViewIfNeeded();
 
-    await expectProgramInList(page, webName);
-    await expect(programRowByName(page, webName).first()).toContainText(webDescription);
-    await expectProgramInList(page, testName);
-    await expect(programRowByName(page, testName).first()).toContainText(testDescription);
+    await expectProgramInList(programs, webName);
+    await expect(programs.programRow(webName).first()).toContainText(webDescription);
+    await expectProgramInList(programs, testName);
+    await expect(programs.programRow(testName).first()).toContainText(testDescription);
   });
 });
