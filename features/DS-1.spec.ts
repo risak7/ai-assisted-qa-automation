@@ -1,1 +1,1 @@
-import '../tests/ds1-create-program.spec';
+import '../tests/ds1-create-new-academic-program.spec';

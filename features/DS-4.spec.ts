@@ -1,1 +1,1 @@
-import '../tests/ds4-create-program.spec';
+import '../tests/ds4-delete-program-with-confirmation.spec';
