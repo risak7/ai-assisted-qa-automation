@@ -13,10 +13,10 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: 3,
-  reporter: [['list'], ['html', { open: 'never' }]],
+  workers: process.env.CI ? 1 : undefined,
+  reporter: process.env.CI ? [['html'], ['github']] : 'list',
   use: {
-    baseURL: process.env.DIDAXIS_URL ?? 'https://test.didaxis.studio',
+    baseURL: process.env.DIDAXIS_URL,
     screenshot: 'only-on-failure',
     trace: 'on-first-retry',
     actionTimeout: 30_000,
