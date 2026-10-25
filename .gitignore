@@ -6,4 +6,5 @@ node_modules/
 .env
 # Playwright
 /playwright/.auth/
+.ci-triage.md
 

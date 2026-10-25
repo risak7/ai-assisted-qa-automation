@@ -126,8 +126,8 @@ export class ProgramsPage {
   }
 
   programRow(name: string): Locator {
-    return this.programTable.getByRole('row').filter({
-      has: this.programTable.getByText(name, { exact: true }),
+    return this.programTable.locator('tbody tr').filter({
+      has: this.page.locator('td').getByText(name, { exact: true }),
     });
   }
 
