@@ -76,7 +76,7 @@ export async function expectProgramCount(programs: ProgramsPage, name: string, c
 
 export async function expectProgramInList(programs: ProgramsPage, name: string): Promise<void> {
   await expectProgramCount(programs, name, 1);
-  const row = programs.programRow(name).first();
+  const row = programs.programRow(name);
   await row.scrollIntoViewIfNeeded();
   await expect(row).toBeVisible();
 }

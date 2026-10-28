@@ -6,370 +6,395 @@ import {
   expectProgramInList,
   expectProgramNotInList,
   gotoPrograms,
+  login,
+  loginAsAdmin,
   textOfLength,
   uniqueSuffix,
 } from './helpers/didaxis-programs';
 
-test.describe.configure({ mode: 'serial', timeout: 120_000 });
+const originalDescription = 'Full-stack web development program';
+const updatedDescription = 'Updated full-stack curriculum';
 
-test.describe('Positive flows', () => {
-  let programs: ProgramsPage;
+async function createTrackedProgram(
+  programs: ProgramsPage,
+  trackProgram: (uuid: string) => void,
+  name: string,
+  description = '',
+): Promise<string> {
+  const id = await programs.createProgram(name, description);
+  trackProgram(id);
+  return id;
+}
 
-  test.beforeEach(async ({ page }) => {
-    programs = await gotoPrograms(page);
-  });
+async function trackIfNewProgram(
+  programs: ProgramsPage,
+  trackProgram: (uuid: string) => void,
+  response: Awaited<ReturnType<ProgramsPage['attemptSaveProgram']>>,
+  knownIds: string[],
+): Promise<void> {
+  if (!response?.ok()) return;
+  const id = await programs.programIdFromResponse(response);
+  if (id && !knownIds.includes(id)) trackProgram(id);
+}
 
-  // Product defect: edit form does not open on the created program. Skipped until the app is fixed.
-  test.fixme("TC-001: Edit form opens with the program's current Program Name and Description", async ({ trackProgram }) => {
-    const programName = `Web Development 2026 ${uniqueSuffix()}`;
-    const description = 'Full-stack web development program';
-    trackProgram(await programs.createProgram(programName, description));
+test.describe('DS-2: Edit existing program details', () => {
+  test.describe.configure({ mode: 'serial', timeout: 120_000 });
 
-    await programs.openEditProgram(programName);
+  test.describe('Happy paths', () => {
+    test('TC-001: Open a program for editing', async ({ programs, trackProgram }) => {
+      const programName = `Web Development 2026 ${uniqueSuffix()}`;
 
-    await expect(programs.editDialog.getByRole('heading', { name: 'Edit Program' })).toBeVisible();
-    await expect(programs.editProgramNameField).toHaveValue(programName);
-    await expect(programs.editDescriptionField).toHaveValue(description);
-    await expect(programs.editSaveButton).toBeVisible();
-  });
+      await expect(programs.heading).toBeVisible();
+      await expect(programs.newProgramButton).toBeVisible();
+      await createTrackedProgram(programs, trackProgram, programName, originalDescription);
 
-  test('TC-002: Saved Program Name replaces the old name in the list and the dialog closes', async ({ trackProgram }) => {
-    const programName = `Web Development 2026 ${uniqueSuffix()}`;
-    const updatedName = `${programName} - Updated`;
-    trackProgram(await programs.createProgram(programName, 'Full-stack web development program'));
+      await programs.openEditProgram(programName);
 
-    await programs.openEditProgram(programName);
-    await programs.editProgramNameField.fill(updatedName);
-    await programs.submitSaveProgram();
-
-    await expectProgramInList(programs, updatedName);
-    await expectProgramNotInList(programs, programName);
-  });
-
-  test('TC-003: Changing only Description leaves Program Name unchanged', async ({ trackProgram }) => {
-    const programName = `Web Development 2026 ${uniqueSuffix()}`;
-    const updatedDescription = 'Evening cohort for full-stack web development';
-    trackProgram(await programs.createProgram(programName, 'Full-stack web development program'));
-
-    await programs.openEditProgram(programName);
-    await programs.editDescriptionField.fill(updatedDescription);
-    await programs.submitSaveProgram();
-
-    await expectProgramCount(programs, programName, 1);
-    await expect(programs.programRow(programName).first()).toContainText(updatedDescription);
-    const stored = await programs.readProgramFields(programName);
-    expect(stored.name).toBe(programName);
-    expect(stored.description).toBe(updatedDescription);
-  });
-
-  test('TC-004: Saving without changes keeps the current Program Name and Description', async ({ trackProgram }) => {
-    const programName = `Web Development 2026 ${uniqueSuffix()}`;
-    const description = 'Full-stack web development program';
-    trackProgram(await programs.createProgram(programName, description));
-
-    await programs.openEditProgram(programName);
-    await expect(programs.editSaveButton).toBeEnabled();
-    await programs.submitSaveProgram();
-
-    await expectProgramCount(programs, programName, 1);
-    await expect(programs.programRow(programName).first()).toContainText(description);
-    const stored = await programs.readProgramFields(programName);
-    expect(stored.name).toBe(programName);
-    expect(stored.description).toBe(description);
-  });
-});
-
-test.describe('Negative flows', () => {
-  let programs: ProgramsPage;
-
-  test.beforeEach(async ({ page }) => {
-    programs = await gotoPrograms(page);
-  });
-
-  test('TC-005: An empty Program Name is not saved', async ({ trackProgram }) => {
-    const programName = `Web Development 2026 ${uniqueSuffix()}`;
-    const description = 'Full-stack web development program';
-    trackProgram(await programs.createProgram(programName, description));
-
-    await programs.openEditProgram(programName);
-    await programs.editProgramNameField.fill('');
-    await expect(programs.editSaveButton).toBeDisabled();
-    await expect(programs.editProgramNameField).toHaveAttribute('aria-invalid', 'false');
-    await expect(programs.editDialog.getByRole('alert')).toHaveCount(0);
-    await programs.closeEditWithoutSaving();
-
-    await expectProgramInList(programs, programName);
-    const stored = await programs.readProgramFields(programName);
-    expect(stored.name).toBe(programName);
-    expect(stored.description).toBe(description);
-  });
-
-  test('TC-006: A whitespace-only Program Name is not saved', async ({ trackProgram }) => {
-    const programName = `Web Development 2026 ${uniqueSuffix()}`;
-    const description = 'Full-stack web development program';
-    trackProgram(await programs.createProgram(programName, description));
-
-    await programs.openEditProgram(programName);
-    await programs.editProgramNameField.fill('   ');
-    await expect(programs.editProgramNameField).toHaveValue('   ');
-    await expect(programs.editSaveButton).toBeDisabled();
-    await programs.closeEditWithoutSaving();
-
-    await expectProgramInList(programs, programName);
-    const stored = await programs.readProgramFields(programName);
-    expect(stored.name).toBe(programName);
-    expect(stored.description).toBe(description);
-  });
-
-  test('TC-007: Renaming onto an existing Program Name keeps both programs', async ({ trackProgram }) => {
-    const suffix = uniqueSuffix();
-    const sourceName = `Web Development 2026 ${suffix}`;
-    const targetName = `Data Analytics 2026 ${suffix}`;
-    const sourceDescription = 'Full-stack web development program';
-    const targetDescription = 'Analytics program';
-    trackProgram(await programs.createProgram(targetName, targetDescription));
-    trackProgram(await programs.createProgram(sourceName, sourceDescription));
-
-    await programs.openEditProgram(sourceName);
-    await programs.editProgramNameField.fill(targetName);
-    await programs.submitSaveProgram();
-
-    await expectProgramNotInList(programs, sourceName);
-    await expectProgramCount(programs, targetName, 2);
-    const original = await programs.readProgramFields(targetName, targetDescription);
-    expect(original.description).toBe(targetDescription);
-    const renamed = await programs.readProgramFields(targetName, sourceDescription);
-    expect(renamed.description).toBe(sourceDescription);
-  });
-
-  test('TC-008: Closing the dialog without Save discards the new Program Name', async ({ trackProgram }) => {
-    const programName = `Web Development 2026 ${uniqueSuffix()}`;
-    const updatedName = `${programName} - Updated`;
-    trackProgram(await programs.createProgram(programName, 'Full-stack web development program'));
-
-    await programs.openEditProgram(programName);
-    await programs.editProgramNameField.fill(updatedName);
-    await programs.closeEditWithoutSaving();
-
-    await expectProgramInList(programs, programName);
-    await expectProgramNotInList(programs, updatedName);
-    const stored = await programs.readProgramFields(programName);
-    expect(stored.name).toBe(programName);
-  });
-
-  test('TC-010: Saving an edit does not add a second program', async ({ trackProgram }) => {
-    const programName = `Web Development 2026 ${uniqueSuffix()}`;
-    const updatedName = `${programName} - Updated`;
-    trackProgram(await programs.createProgram(programName, 'Full-stack web development program'));
-
-    await programs.openEditProgram(programName);
-    await programs.editProgramNameField.fill(updatedName);
-    await programs.submitSaveProgram();
-
-    await expectProgramCount(programs, updatedName, 1);
-    await expectProgramNotInList(programs, programName);
-  });
-});
-
-test.describe('Edge cases', () => {
-  let programs: ProgramsPage;
-
-  test.beforeEach(async ({ page }) => {
-    programs = await gotoPrograms(page);
-  });
-
-  test('TC-011: A one-character Program Name is saved', async ({ trackProgram }) => {
-    const programName = `Web Development 2026 ${uniqueSuffix()}`;
-    const description = 'Full-stack web development program';
-    const candidates = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ';
-    let shortName = '';
-    for (const candidate of candidates) {
-      if ((await programs.countProgramRowsNamed(candidate)) === 0) {
-        shortName = candidate;
-        break;
-      }
-    }
-    expect(shortName, 'an unused one-character Program Name').toHaveLength(1);
-    trackProgram(await programs.createProgram(programName, description));
-
-    await programs.openEditProgram(programName);
-    await programs.editProgramNameField.fill(shortName);
-    expect(await programs.editProgramNameField.inputValue()).toHaveLength(1);
-    await expect(programs.editSaveButton).toBeEnabled();
-    await programs.submitSaveProgram();
-
-    await expectProgramInList(programs, shortName);
-    await expectProgramNotInList(programs, programName);
-    const stored = await programs.readProgramFields(shortName);
-    expect(stored.name).toBe(shortName);
-    expect(stored.description).toBe(description);
-  });
-
-  test('TC-012: Special characters in Program Name are stored and shown as entered', async ({ trackProgram }) => {
-    const programName = `Web Development 2026 ${uniqueSuffix()}`;
-    const specialName = `C++ & .NET (Cohort #1) ${uniqueSuffix()}`;
-    trackProgram(await programs.createProgram(programName, 'Full-stack web development program'));
-
-    await programs.openEditProgram(programName);
-    await programs.editProgramNameField.fill(specialName);
-    await programs.submitSaveProgram();
-
-    await expectProgramInList(programs, specialName);
-    const stored = await programs.readProgramFields(specialName);
-    expect(stored.name).toBe(specialName);
-  });
-
-  test('TC-013: Leading and trailing spaces in Program Name are trimmed before save', async ({ trackProgram }) => {
-    const programName = `Web Development 2026 ${uniqueSuffix()}`;
-    const trimmedName = `Cybersecurity 2026 ${uniqueSuffix()}`;
-    const spacedName = `  ${trimmedName}  `;
-    trackProgram(await programs.createProgram(programName, 'Defensive security program'));
-
-    await programs.openEditProgram(programName);
-    await programs.editProgramNameField.fill(spacedName);
-    await programs.submitSaveProgram();
-
-    await expectProgramInList(programs, trimmedName);
-    await expectProgramNotInList(programs, spacedName);
-    const stored = await programs.readProgramFields(trimmedName);
-    expect(stored.name).toBe(trimmedName);
-  });
-
-  test('TC-014: A 255-character Program Name is saved and shown in full', async ({ trackProgram }) => {
-    const programName = `Web Development 2026 ${uniqueSuffix()}`;
-    const longName = textOfLength(255, `Web Development 2026 - Updated ${uniqueSuffix()} `);
-    trackProgram(await programs.createProgram(programName, 'Boundary length name'));
-
-    await programs.openEditProgram(programName);
-    await expect(programs.editProgramNameField).not.toHaveAttribute('maxlength');
-    await programs.editProgramNameField.fill(longName);
-    expect(await programs.editProgramNameField.inputValue()).toHaveLength(255);
-    await expect(programs.editSaveButton).toBeEnabled();
-    await programs.submitSaveProgram();
-
-    await expectProgramInList(programs, longName);
-    await expectProgramNotInList(programs, programName);
-  });
-
-  test('TC-015: A 256-character Program Name is saved', async ({ trackProgram }) => {
-    const programName = `Web Development 2026 ${uniqueSuffix()}`;
-    const longName = textOfLength(256, `Web Development 2026 - Updated ${uniqueSuffix()} `);
-    trackProgram(await programs.createProgram(programName, 'Over max length name'));
-
-    await programs.openEditProgram(programName);
-    await expect(programs.editProgramNameField).not.toHaveAttribute('maxlength');
-    await programs.editProgramNameField.fill(longName);
-    expect(await programs.editProgramNameField.inputValue()).toHaveLength(256);
-    await expect(programs.editSaveButton).toBeEnabled();
-    await expect(programs.editDialog.getByRole('alert')).toHaveCount(0);
-    await programs.submitSaveProgram();
-
-    await expectProgramInList(programs, longName);
-    await expectProgramNotInList(programs, programName);
-  });
-
-  test('TC-016: A Program Name that differs only by letter case is saved as entered', async ({ trackProgram }) => {
-    const suffix = uniqueSuffix();
-    const existingName = `Data Analytics 2026 ${suffix}`;
-    const sourceName = `Web Development 2026 ${suffix}`;
-    const caseVariant = existingName.toLowerCase();
-    trackProgram(await programs.createProgram(existingName, 'Analytics program'));
-    trackProgram(await programs.createProgram(sourceName, 'Full-stack web development program'));
-
-    await programs.openEditProgram(sourceName);
-    await programs.editProgramNameField.fill(caseVariant);
-    await programs.submitSaveProgram();
-
-    await expectProgramInList(programs, existingName);
-    await expectProgramInList(programs, caseVariant);
-    await expectProgramNotInList(programs, sourceName);
-  });
-
-  test('TC-017: Markup entered in Program Name is shown as text', async ({ page, trackProgram }) => {
-    const programName = `Web Development 2026 ${uniqueSuffix()}`;
-    const markupName = `<script>alert("xss")</script> ${uniqueSuffix()}`;
-    let alertSeen = false;
-    page.on('dialog', async (dialog) => {
-      if (dialog.type() === 'alert') {
-        alertSeen = true;
-        await dialog.dismiss();
-      }
+      await expect(programs.editDialog).toBeVisible();
+      await expect(programs.editProgramNameField).toHaveValue(programName);
+      await expect(programs.editDescriptionField).toHaveValue(originalDescription);
+      await expect(programs.editCancelButton).toBeVisible();
+      await expect(programs.editSaveButton).toBeVisible();
     });
 
-    trackProgram(await programs.createProgram(programName, 'Markup should be plain text'));
-    await programs.openEditProgram(programName);
-    await programs.editProgramNameField.fill(markupName);
-    await programs.submitSaveProgram();
+    test('TC-002: Successfully edit a program name', async ({ programs, trackProgram }) => {
+      const suffix = uniqueSuffix();
+      const programName = `Web Development 2026 ${suffix}`;
+      const updatedName = `Web Development 2026 - Updated ${suffix}`;
+      const id = await createTrackedProgram(programs, trackProgram, programName, originalDescription);
 
-    await expectProgramInList(programs, markupName);
-    expect(alertSeen).toBe(false);
+      await programs.openEditProgram(programName);
+      await programs.fillEditProgramName(updatedName);
+      await trackIfNewProgram(programs, trackProgram, await programs.submitSaveProgram(), [id]);
+
+      await expect(programs.editDialog).toBeHidden();
+      await expectProgramInList(programs, updatedName);
+      await expect(programs.programRow(updatedName)).toContainText(originalDescription);
+      await expectProgramNotInList(programs, programName);
+    });
+
+    test('TC-003: Changing only Description leaves Program Name unchanged', async ({ programs, trackProgram }) => {
+      const programName = `Web Development 2026 ${uniqueSuffix()}`;
+      const id = await createTrackedProgram(programs, trackProgram, programName, originalDescription);
+
+      await programs.openEditProgram(programName);
+      await programs.fillEditDescription(updatedDescription);
+      await expect(programs.editProgramNameField).toHaveValue(programName);
+      await trackIfNewProgram(programs, trackProgram, await programs.submitSaveProgram(), [id]);
+
+      await expect(programs.editDialog).toBeHidden();
+      await expectProgramInList(programs, programName);
+      await expect(programs.programRow(programName)).toContainText(updatedDescription);
+      await expect(programs.programRow(programName)).not.toContainText(originalDescription);
+    });
+
+    test('TC-004: Update Program Name and Description together', async ({ programs, trackProgram }) => {
+      const suffix = uniqueSuffix();
+      const programName = `Web Development 2026 ${suffix}`;
+      const updatedName = `Web Development 2026 - Updated ${suffix}`;
+      const id = await createTrackedProgram(programs, trackProgram, programName, originalDescription);
+
+      await programs.openEditProgram(programName);
+      await programs.fillEditProgramName(updatedName);
+      await programs.fillEditDescription(updatedDescription);
+      await trackIfNewProgram(programs, trackProgram, await programs.submitSaveProgram(), [id]);
+
+      await expect(programs.editDialog).toBeHidden();
+      await expectProgramInList(programs, updatedName);
+      await expect(programs.programRow(updatedName)).toContainText(updatedDescription);
+      await expectProgramNotInList(programs, programName);
+    });
+
+    test('TC-005: Clearing Description keeps the Program Name', async ({ programs, trackProgram }) => {
+      const programName = `Web Development 2026 ${uniqueSuffix()}`;
+      const id = await createTrackedProgram(programs, trackProgram, programName, originalDescription);
+
+      await programs.openEditProgram(programName);
+      await programs.clearEditDescription();
+      await expect(programs.editProgramNameField).toHaveValue(programName);
+      await expect(programs.editSaveButton).toBeEnabled();
+      await trackIfNewProgram(programs, trackProgram, await programs.submitSaveProgram(), [id]);
+
+      await expect(programs.editDialog).toBeHidden();
+      await expectProgramInList(programs, programName);
+      await expect(programs.programRow(programName)).not.toContainText(originalDescription);
+    });
+
+    test('TC-006: Cancel discards unsaved edits', async ({ programs, trackProgram }) => {
+      const suffix = uniqueSuffix();
+      const programName = `Web Development 2026 ${suffix}`;
+      const updatedName = `Web Development 2026 - Updated ${suffix}`;
+      await createTrackedProgram(programs, trackProgram, programName, originalDescription);
+
+      await programs.openEditProgram(programName);
+      await programs.fillEditProgramName(updatedName);
+      await programs.fillEditDescription(updatedDescription);
+      await programs.closeEditWithoutSaving();
+
+      await expect(programs.editDialog).toBeHidden();
+      await expectProgramInList(programs, programName);
+      await expect(programs.programRow(programName)).toContainText(originalDescription);
+      await expectProgramNotInList(programs, updatedName);
+    });
   });
 
-  test('TC-018: Clearing Description keeps the current Program Name', async ({ trackProgram }) => {
-    const programName = `Web Development 2026 ${uniqueSuffix()}`;
-    trackProgram(await programs.createProgram(programName, 'Full-stack web development program'));
+  test.describe('Negative flows', () => {
+    test('TC-007: Empty Program Name cannot be saved', async ({ programs, trackProgram }) => {
+      const programName = `Web Development 2026 ${uniqueSuffix()}`;
+      await createTrackedProgram(programs, trackProgram, programName, originalDescription);
 
-    await programs.openEditProgram(programName);
-    await programs.editDescriptionField.fill('');
-    await expect(programs.editSaveButton).toBeEnabled();
-    await programs.submitSaveProgram();
+      await programs.openEditProgram(programName);
+      await programs.clearEditProgramName();
 
-    await expectProgramInList(programs, programName);
-    const stored = await programs.readProgramFields(programName);
-    expect(stored.name).toBe(programName);
-    expect(stored.description).toBe('');
+      await expect(programs.editProgramNameField).toHaveValue('');
+      await expect(programs.editSaveButton).toBeDisabled();
+      await expect(programs.editDialog).toBeVisible();
+      await expectProgramInList(programs, programName);
+    });
+
+    test('TC-008: Whitespace-only Program Name cannot be saved', async ({ programs, trackProgram }) => {
+      const programName = `Web Development 2026 ${uniqueSuffix()}`;
+      await createTrackedProgram(programs, trackProgram, programName, originalDescription);
+
+      await programs.openEditProgram(programName);
+      await programs.fillEditProgramName('   ');
+
+      await expect(programs.editProgramNameField).toHaveValue('   ');
+      await expect(programs.editSaveButton).toBeDisabled();
+      await expect(programs.editDialog).toBeVisible();
+      await expectProgramInList(programs, programName);
+      await expect(programs.programRow(programName)).toContainText(programName);
+    });
+
+    test('TC-009: Duplicate Program Name is rejected', async ({ programs, trackProgram }) => {
+      const suffix = uniqueSuffix();
+      const sourceName = `Web Development 2026 ${suffix}`;
+      const takenName = `Data Science 2026 ${suffix}`;
+      const sourceId = await createTrackedProgram(programs, trackProgram, sourceName, originalDescription);
+      const takenId = await createTrackedProgram(programs, trackProgram, takenName, 'Analytics program');
+      await expectProgramInList(programs, takenName);
+
+      await programs.openEditProgram(sourceName);
+      await programs.fillEditProgramName(takenName);
+      if (await programs.editSaveButton.isEnabled()) {
+        const response = await programs.attemptSaveProgram();
+        await trackIfNewProgram(programs, trackProgram, response, [sourceId, takenId]);
+      }
+
+      await expect(programs.editDialog).toBeVisible();
+      await expect(programs.editNameTakenMessage.filter({ hasText: takenName })).toBeVisible();
+      await expectProgramInList(programs, sourceName);
+      await expectProgramCount(programs, takenName, 1);
+    });
+
+    test('TC-010: A non-admin cannot edit a program', async ({ page, programs, trackProgram }) => {
+      const email = process.env.DIDAXIS_NON_ADMIN_EMAIL;
+      const password = process.env.DIDAXIS_NON_ADMIN_PASSWORD;
+      if (!email || !password) {
+        test.skip(true, 'Set DIDAXIS_NON_ADMIN_EMAIL and DIDAXIS_NON_ADMIN_PASSWORD for TC-010');
+        return;
+      }
+
+      const programName = `Web Development 2026 ${uniqueSuffix()}`;
+      await createTrackedProgram(programs, trackProgram, programName, originalDescription);
+      await expectProgramInList(programs, programName);
+
+      try {
+        await login(page, email, password);
+        const asNonAdmin = await gotoPrograms(page);
+        const row = asNonAdmin.programRow(programName);
+        await row.scrollIntoViewIfNeeded();
+        await expect(asNonAdmin.editButtonForProgram(programName)).toHaveCount(0);
+        await expect(asNonAdmin.editDialog).toBeHidden();
+        await expectProgramInList(asNonAdmin, programName);
+      } finally {
+        await loginAsAdmin(page);
+      }
+    });
   });
 
-  test('TC-019: A 1000-character Description is saved and Program Name stays the same', async ({ trackProgram }) => {
-    const programName = `Web Development 2026 ${uniqueSuffix()}`;
-    const description = description1000('Full-stack web development program');
-    trackProgram(await programs.createProgram(programName, 'Short description'));
+  test.describe('Edge cases', () => {
+    test('TC-011: A one-character Program Name is accepted', async ({ programs, trackProgram }) => {
+      const programName = `Web Development 2026 ${uniqueSuffix()}`;
+      const shortName = `A${uniqueSuffix()}`;
+      const id = await createTrackedProgram(programs, trackProgram, programName, originalDescription);
 
-    await programs.openEditProgram(programName);
-    await programs.editDescriptionField.fill(description);
-    await programs.submitSaveProgram();
+      await programs.openEditProgram(programName);
+      await programs.fillEditProgramName(shortName);
+      await expect(programs.editSaveButton).toBeEnabled();
+      await trackIfNewProgram(programs, trackProgram, await programs.submitSaveProgram(), [id]);
 
-    await expectProgramInList(programs, programName);
-    await expect(programs.programRow(programName).first()).toContainText(description.slice(0, 80));
-    const stored = await programs.readProgramFields(programName);
-    expect(stored.name).toBe(programName);
-    expect(stored.description).toBe(description);
-  });
+      await expect(programs.editDialog).toBeHidden();
+      await expectProgramInList(programs, shortName);
+      await expectProgramNotInList(programs, programName);
+    });
 
-  test('TC-020: Edit form shows the AI generation fields with their current values', async ({ trackProgram }) => {
-    const programName = `Web Development 2026 ${uniqueSuffix()}`;
-    trackProgram(await programs.createProgram(programName, 'Full-stack web development program'));
+    test('TC-012: Special characters in Program Name are preserved', async ({ programs, trackProgram }) => {
+      const programName = `Web Development 2026 ${uniqueSuffix()}`;
+      const specialName = `C++ & .NET (Cohort #1) ${uniqueSuffix()}`;
+      const id = await createTrackedProgram(programs, trackProgram, programName, originalDescription);
 
-    await programs.openEditProgram(programName);
+      await programs.openEditProgram(programName);
+      await programs.fillEditProgramName(specialName);
+      await trackIfNewProgram(programs, trackProgram, await programs.submitSaveProgram(), [id]);
 
-    await expect(programs.editDialog.getByRole('heading', { name: 'Edit Program' })).toBeVisible();
-    await expect(programs.editDialog.getByRole('button', { name: /Show AI Generation Config/ })).toBeVisible();
-    await expect(programs.editLabeledField('Total Program Hours')).toHaveValue('');
-    await expect(programs.editLabeledField('Total Program Hours')).toHaveAttribute('placeholder', 'e.g. 900');
-    await expect(programs.editDialog.getByText('Required for AI curriculum generation')).toBeVisible();
-    await expect(programs.editLabeledField('Default Session Hours')).toHaveValue('4');
-    await expect(programs.editLabeledField('Default Exam Hours')).toHaveValue('3');
-    await expect(programs.editLabeledField('Target Audience')).toHaveValue('');
-    await expect(programs.editLabeledField('Target Audience')).toHaveAttribute('placeholder', 'e.g. Career changers, no CS background');
-    await expect(programs.editLabeledField('Focus Areas')).toHaveValue('');
-    await expect(programs.editLabeledField('Focus Areas')).toHaveAttribute('placeholder', 'e.g. Python, SQL, Machine Learning, Data Visualization');
-    await expect(programs.editDialog.getByText('Sync/Async Ratio: 70% sync / 30% async')).toBeVisible();
-  });
+      await expect(programs.editDialog).toBeHidden();
+      await expectProgramInList(programs, specialName);
+      const stored = await programs.readProgramFields(specialName);
+      expect(stored.name).toBe(specialName);
+    });
 
-  test('TC-021: Changing only Description leaves session and exam hours unchanged', async ({ trackProgram }) => {
-    const programName = `Web Development 2026 ${uniqueSuffix()}`;
-    const updatedDescription = 'Evening cohort for full-stack web development';
-    trackProgram(await programs.createProgram(programName, 'Full-stack web development program'));
+    test('TC-013: Surrounding spaces are trimmed from Program Name', async ({ programs, trackProgram }) => {
+      const suffix = uniqueSuffix();
+      const programName = `Web Development 2026 ${suffix}`;
+      const trimmedName = `Cybersecurity 2026 ${suffix}`;
+      const paddedName = `  ${trimmedName}  `;
+      const id = await createTrackedProgram(programs, trackProgram, programName, originalDescription);
 
-    await programs.openEditProgram(programName);
-    await programs.editDescriptionField.fill(updatedDescription);
-    await programs.submitSaveProgram();
+      await programs.openEditProgram(programName);
+      await programs.fillEditProgramName(paddedName);
+      await trackIfNewProgram(programs, trackProgram, await programs.submitSaveProgram(), [id]);
 
-    await programs.openEditProgram(programName);
-    await expect(programs.editProgramNameField).toHaveValue(programName);
-    await expect(programs.editDescriptionField).toHaveValue(updatedDescription);
-    await expect(programs.editLabeledField('Default Session Hours')).toHaveValue('4');
-    await expect(programs.editLabeledField('Default Exam Hours')).toHaveValue('3');
-    await expect(programs.editLabeledField('Total Program Hours')).toHaveValue('');
+      await expect(programs.editDialog).toBeHidden();
+      await expectProgramInList(programs, trimmedName);
+      await expectProgramNotInList(programs, programName);
+      const stored = await programs.readProgramFields(trimmedName);
+      expect(stored.name).toBe(trimmedName);
+    });
+
+    test('TC-014: Program Name at 255 characters is accepted', async ({ programs, trackProgram }) => {
+      const programName = `Web Development 2026 ${uniqueSuffix()}`;
+      const longName = textOfLength(255, `Web Development 2026 ${uniqueSuffix()} `);
+      const id = await createTrackedProgram(programs, trackProgram, programName, originalDescription);
+
+      await programs.openEditProgram(programName);
+      await programs.fillEditProgramName(longName);
+      await expect(programs.editSaveButton).toBeEnabled();
+      await trackIfNewProgram(programs, trackProgram, await programs.submitSaveProgram(), [id]);
+
+      await expect(programs.editDialog).toBeHidden();
+      await expectProgramInList(programs, longName);
+      await programs.openEditProgram(longName);
+      await expect(programs.editProgramNameField).toHaveValue(longName);
+    });
+
+    test('TC-015: Program Name over 255 characters is rejected', async ({ programs, trackProgram }) => {
+      const programName = `Web Development 2026 ${uniqueSuffix()}`;
+      const tooLongName = textOfLength(256, `Web Development 2026 ${uniqueSuffix()} `);
+      const id = await createTrackedProgram(programs, trackProgram, programName, originalDescription);
+
+      await programs.openEditProgram(programName);
+      await programs.fillEditProgramName(tooLongName);
+
+      const blockedBeforeSave =
+        (await programs.editSaveButton.isDisabled()) || (await programs.editMaxLengthMessage.isVisible());
+      if (!blockedBeforeSave) {
+        const response = await programs.attemptSaveProgram();
+        await trackIfNewProgram(programs, trackProgram, response, [id]);
+      }
+
+      await expectProgramNotInList(programs, tooLongName);
+      await expectProgramInList(programs, programName);
+      await expect.poll(async () => {
+        if (await programs.editMaxLengthMessage.isVisible()) return true;
+        if (!(await programs.editDialog.isVisible())) return false;
+        return programs.editSaveButton.isDisabled();
+      }).toBe(true);
+    });
+
+    test('TC-016: Program names stay unique regardless of letter case', async ({ programs, trackProgram }) => {
+      const suffix = uniqueSuffix();
+      const canonicalName = `Web Development 2026 ${suffix}`;
+      const variantName = canonicalName.toLowerCase();
+      const sourceName = `Data Science 2026 ${suffix}`;
+      const canonicalId = await createTrackedProgram(programs, trackProgram, canonicalName, originalDescription);
+      const sourceId = await createTrackedProgram(programs, trackProgram, sourceName, 'Analytics program');
+      await expectProgramInList(programs, canonicalName);
+
+      await programs.openEditProgram(sourceName);
+      await programs.fillEditProgramName(variantName);
+      if (await programs.editSaveButton.isEnabled()) {
+        const response = await programs.attemptSaveProgram();
+        await trackIfNewProgram(programs, trackProgram, response, [canonicalId, sourceId]);
+      }
+
+      await expect(programs.editDialog).toBeVisible();
+      await expectProgramInList(programs, sourceName);
+      await expectProgramCount(programs, canonicalName, 1);
+      await expectProgramCount(programs, variantName, 0);
+    });
+
+    test('TC-017: Markup in Program Name is stored as text', async ({ page, programs, trackProgram }) => {
+      const suffix = uniqueSuffix();
+      const programName = `Web Development 2026 ${suffix}`;
+      const markupName = `<script>alert("xss")</script> ${suffix}`;
+      let dialogSeen = false;
+      page.on('dialog', async (dialog) => {
+        dialogSeen = true;
+        await dialog.dismiss();
+      });
+
+      const id = await createTrackedProgram(programs, trackProgram, programName, originalDescription);
+      await programs.openEditProgram(programName);
+      await programs.fillEditProgramName(markupName);
+      await trackIfNewProgram(programs, trackProgram, await programs.submitSaveProgram(), [id]);
+
+      await expect(programs.editDialog).toBeHidden();
+      await expectProgramInList(programs, markupName);
+      await expect(programs.programRow(markupName)).toContainText('<script>alert("xss")</script>');
+      expect(dialogSeen).toBe(false);
+    });
+
+    test('TC-018: A long Description is preserved', async ({ programs, trackProgram }) => {
+      const programName = `Web Development 2026 ${uniqueSuffix()}`;
+      const description = description1000(originalDescription);
+      const id = await createTrackedProgram(programs, trackProgram, programName, originalDescription);
+
+      await programs.openEditProgram(programName);
+      await programs.fillEditDescription(description);
+      await trackIfNewProgram(programs, trackProgram, await programs.submitSaveProgram(), [id]);
+
+      await expect(programs.editDialog).toBeHidden();
+      await expectProgramInList(programs, programName);
+      await programs.openEditProgram(programName);
+      await expect(programs.editDescriptionField).toHaveValue(description);
+    });
+
+    test('TC-019: Saving with no changes does not add a second row', async ({ programs, trackProgram }) => {
+      const programName = `Web Development 2026 ${uniqueSuffix()}`;
+      const id = await createTrackedProgram(programs, trackProgram, programName, originalDescription);
+      await expectProgramCount(programs, programName, 1);
+
+      await programs.openEditProgram(programName);
+      await expect(programs.editProgramNameField).toHaveValue(programName);
+      await expect(programs.editDescriptionField).toHaveValue(originalDescription);
+      const response = await programs.attemptSaveProgram();
+      await trackIfNewProgram(programs, trackProgram, response, [id]);
+
+      await expect(programs.editDialog).toBeHidden();
+      await expectProgramCount(programs, programName, 1);
+      await expect(programs.programRow(programName)).toContainText(originalDescription);
+    });
+
+    test('TC-020: Description-only edit leaves the other dialog fields unchanged', async ({ programs, trackProgram }) => {
+      const programName = `Web Development 2026 ${uniqueSuffix()}`;
+      const id = await createTrackedProgram(programs, trackProgram, programName, originalDescription);
+
+      await programs.openEditProgram(programName);
+      await expect.poll(() => programs.editFieldValueByVisibleLabel('Default Session Hours')).toBe('4');
+      await expect.poll(() => programs.editFieldValueByVisibleLabel('Default Exam Hours')).toBe('3');
+      await expect(programs.editSyncAsyncRatio).toContainText('70% sync / 30% async');
+
+      await programs.fillEditDescription(updatedDescription);
+      await expect(programs.editProgramNameField).toHaveValue(programName);
+      await trackIfNewProgram(programs, trackProgram, await programs.submitSaveProgram(), [id]);
+
+      await programs.openEditProgram(programName);
+      await expect(programs.editDescriptionField).toHaveValue(updatedDescription);
+      await expect(programs.editProgramNameField).toHaveValue(programName);
+      await expect.poll(() => programs.editFieldValueByVisibleLabel('Default Session Hours')).toBe('4');
+      await expect.poll(() => programs.editFieldValueByVisibleLabel('Default Exam Hours')).toBe('3');
+      await expect(programs.editSyncAsyncRatio).toContainText('70% sync / 30% async');
+    });
   });
 });

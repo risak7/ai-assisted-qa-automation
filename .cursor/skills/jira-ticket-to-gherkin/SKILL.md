@@ -1,5 +1,5 @@
 ---
-description: Turns a Jira ticket's acceptance criteria into structured, reviewable Gherkin test scenarios. Use this skill whenever the user references a Jira ticket (DS-1, DS-2, etc.) and asks for test cases, a test plan, scenarios, or wants to plan testing for a ticket — even if they don't say the word "Gherkin".
+description: Turns a Jira ticket's acceptance criteria into structured, reviewable Gherkin test scenarios after opening the live app and recording real locators and behavior. Opens the app with the Playwright MCP, or with the agent-browser CLI and then the Playwright CLI when that MCP is unavailable. Use this skill whenever the user references a Jira ticket (DS-1, DS-2, etc.) and asks for test cases, a test plan, scenarios, or wants to plan testing for a ticket — even if they don't say the word "Gherkin".
 ---
 # Jira Ticket to Gherkin Test Cases
 
@@ -12,22 +12,45 @@ code gets written.
 1. Read the referenced Jira ticket using the Atlassian MCP. Extract the
    title, description, and every acceptance criterion.
 
-2. Generate test scenarios as a Gherkin `.feature` file:
+2. Open the live app before writing any scenario. Read `DIDAXIS_URL`,
+   `DIDAXIS_EMAIL`, and `DIDAXIS_PASSWORD` from `.env`. The URL defaults
+   to `https://test.didaxis.studio`. Sign in at `{DIDAXIS_URL}/login`,
+   open every page the ticket touches, and record visible labels, control
+   names, and what the UI actually does.
+
+   Use the first tool that is available:
+
+   1. Playwright MCP (`user-Playwright`). Read its tool schemas first.
+   2. agent-browser CLI, when that MCP is missing or unusable:
+      `npx agent-browser open <url>`, then `snapshot -i`, `fill`, and `click`.
+      Close with `npx agent-browser close`.
+   3. Playwright CLI, when agent-browser is not available:
+      `npx playwright cli open <url>`, then `snapshot`, `fill`, and `click`.
+      Close with `npx playwright cli close`.
+
+   If login or a page fails on the tool that opened the app, stop and
+   report that. Do not switch tools and do not invent a flow. Use those
+   observations in the scenarios. Do not invent selectors, page names, or
+   behavior. Note a real control beside the step that names it, for
+   example `# Observed: Programs page, button name "Create program"`.
+
+3. Generate test scenarios as a Gherkin `.feature` file:
    - One `Feature`, named after the ticket
    - Cover every acceptance criterion with at least one `Scenario`
    - Add negative scenarios — what should NOT happen
    - Add edge-case scenarios — boundaries, empty inputs, duplicates,
      special characters, max length
 
-3. Write each scenario in Given / When / Then form. `Given` sets the
+4. Write each scenario in Given / When / Then form. `Given` sets the
    starting state, `When` is the action under test, `Then` is the
    observable expected outcome.
 
-4. Group scenarios with comments: `# Happy paths`, `# Negative`, `# Edge cases`.
+5. Group scenarios with comments: `# Happy paths`, `# Negative`, `# Edge cases`.
 
-5. Use real, specific values from the ticket — never placeholders.
+6. Use real, specific values from the ticket and names from the live UI —
+   never placeholders.
 
-6. End the file with a comment block listing any ambiguities or gaps
+7. End the file with a comment block listing any ambiguities or gaps
    found in the ticket's acceptance criteria, so the QA can resolve them.
 
 ## Output

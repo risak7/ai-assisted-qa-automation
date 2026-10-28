@@ -1,0 +1,38 @@
+---
+description: How this project writes Playwright tests — auth, POM, locators, cleanup, data.
+globs: tests/**
+alwaysApply: false
+---
+
+# Playwright Conventions
+
+## Auth (from auth-strategy.md)
+
+Stored session by default (`playwright/.auth/user.json` via `tests/auth.setup.ts` and project `storageState`); UI login only for login-page tests. Override with empty storage when the scenario must start logged out:
+
+```typescript
+test.use({ storageState: { cookies: [], origins: [] } });
+```
+
+## Page Objects (from pom-conventions)
+
+One POM per page/component in `pages/`; locators as `readonly` in the constructor; no assertions in POMs; tests describe intent. Priority: `getByRole` → `getByLabel` / `getByPlaceholder` → `getByText` → `getByTestId` (comment why). Disambiguate with `.filter({ hasText })`, not `.first()`.
+
+```typescript
+// tests/foo.spec.ts — expect here
+await programs.openNewProgramModal();
+await expect(modal.programNameInput).toBeVisible();
+
+// pages/ProgramsPage.ts — actions only
+async openNewProgramModal() {
+  await this.newProgramButton.click();
+}
+```
+
+## Locators
+
+Role/label-based; never CSS selectors or XPath; never brittle exact text when a role+name works.
+
+## Data & cleanup (from api-cleanup)
+
+Unique names with `Date.now()` (or similar); every test that creates a program calls `trackProgram(uuid)` and imports `test` from `fixtures/cleanup.fixture.ts`, not `@playwright/test`. Teardown deletes via API (`DELETE /api/programs/<uuid>?purge=true`); never delete data the test did not create.

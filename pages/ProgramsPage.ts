@@ -17,6 +17,14 @@ function isUpdateProgramPatch(response: Response): boolean {
   return response.request().method() === 'PATCH' && /\/programs\/[^/]+$/.test(programsCollectionPath(response));
 }
 
+function isCreateProgramPost(response: Response): boolean {
+  return response.request().method() === 'POST' && programsCollectionPath(response).endsWith('/programs');
+}
+
+function isProgramWrite(response: Response): boolean {
+  return isUpdateProgramPatch(response) || isCreateProgramPost(response);
+}
+
 function isDeleteProgram(response: Response): boolean {
   return response.request().method() === 'DELETE' && /\/programs\/[^/]+$/.test(programsCollectionPath(response));
 }
@@ -39,9 +47,17 @@ export class ProgramsPage {
   readonly editDescriptionField: Locator;
   readonly editSaveButton: Locator;
   readonly editCancelButton: Locator;
+  readonly editSyncAsyncRatio: Locator;
+  readonly editNameTakenMessage: Locator;
+  readonly editMaxLengthMessage: Locator;
   readonly duplicateNameMessage: Locator;
   readonly maxLengthValidationMessage: Locator;
   readonly searchBox: Locator;
+
+  /** Edit Program dialog only. The programs table behind it is out of scope. */
+  static editDialogAxeIncludeSelector(): string {
+    return '[role="dialog"]';
+  }
 
   constructor(page: Page) {
     this.page = page;
@@ -61,6 +77,15 @@ export class ProgramsPage {
     this.editDescriptionField = this.editDialog.getByLabel('Description');
     this.editSaveButton = this.editDialog.getByRole('button', { name: 'Save' });
     this.editCancelButton = this.editDialog.getByRole('button', { name: 'Cancel' });
+    this.editSyncAsyncRatio = this.editDialog.getByText(/Sync\/Async Ratio:/);
+    this.editNameTakenMessage = this.editDialog
+      .getByText(/already exists/i)
+      .or(page.getByRole('alert').filter({ hasText: /already exists/i }))
+      .or(page.getByRole('status').filter({ hasText: /already exists/i }));
+    this.editMaxLengthMessage = this.editDialog
+      .getByText(/maximum length|too long|exceeds|255 character/i)
+      .or(page.getByRole('alert').filter({ hasText: /maximum length|too long|exceeds|255/i }))
+      .or(page.getByRole('status').filter({ hasText: /maximum length|too long|exceeds|255/i }));
     this.duplicateNameMessage = page.getByText(/already exists/i);
     this.maxLengthValidationMessage = page.getByText(/maximum length|too long|255/i);
     this.searchBox = page.getByRole('searchbox');
@@ -146,7 +171,7 @@ export class ProgramsPage {
   }
 
   editButtonForProgram(name: string): Locator {
-    return this.programRow(name).first().getByRole('button', { name: `Edit ${name}`, exact: true });
+    return this.programRow(name).getByRole('button', { name: `Edit ${name}`, exact: true });
   }
 
   async countProgramRowsNamed(name: string): Promise<number> {
@@ -201,21 +226,125 @@ export class ProgramsPage {
   }
 
   async createdProgramId(response: Response): Promise<string> {
-    const body = await response.json();
-    const id = body?.data?.id ?? body?.id;
-    if (typeof id !== 'string' || id.length === 0) {
+    const id = await this.programIdFromResponse(response);
+    if (!id) {
       throw new Error('Create program response did not include a program id');
     }
     return id;
   }
 
+  async programIdFromResponse(response: Response): Promise<string | undefined> {
+    const body = await response.json().catch(() => undefined);
+    const id = body?.data?.id ?? body?.id;
+    return typeof id === 'string' && id.length > 0 ? id : undefined;
+  }
+
+  private async fillEditField(field: Locator, value: string): Promise<void> {
+    await field.scrollIntoViewIfNeeded();
+    await field.click({ timeout: 15_000 });
+    await field.fill(value, { timeout: 15_000 });
+  }
+
   async openEditProgram(name: string, description?: string): Promise<void> {
     const row = description === undefined
-      ? this.programRow(name).first()
-      : this.programRowWithDescription(name, description).first();
+      ? this.programRow(name)
+      : this.programRowWithDescription(name, description);
     await row.scrollIntoViewIfNeeded();
     await row.getByRole('button', { name: `Edit ${name}`, exact: true }).click();
     await this.editDialog.waitFor({ state: 'visible', timeout: 15_000 });
+  }
+
+  async fillEditProgramName(value: string): Promise<void> {
+    await this.fillEditField(this.editProgramNameField, value);
+  }
+
+  async fillEditDescription(value: string): Promise<void> {
+    await this.fillEditField(this.editDescriptionField, value);
+  }
+
+  async clearEditProgramName(): Promise<void> {
+    await this.fillEditField(this.editProgramNameField, '');
+  }
+
+  async clearEditDescription(): Promise<void> {
+    await this.fillEditField(this.editDescriptionField, '');
+  }
+
+  /**
+   * Default Session Hours and Default Exam Hours have visible labels and no
+   * accessible name, so getByRole({ name }) and getByLabel do not match them.
+   * Walk from the visible label to the nearest wrapper that owns one input.
+   */
+  async editFieldValueByVisibleLabel(label: string): Promise<string> {
+    const labelNode = this.editDialog.getByText(label, { exact: true });
+    return labelNode.evaluate((node) => {
+      const readControl = (root: Element | null): string | undefined => {
+        if (!root) return undefined;
+        if (root instanceof HTMLInputElement || root instanceof HTMLTextAreaElement) return root.value;
+        const fields = [...root.querySelectorAll('input, textarea')].filter(
+          (field) => field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement,
+        );
+        if (fields.length !== 1) return undefined;
+        return (fields[0] as HTMLInputElement).value;
+      };
+
+      const own = readControl(node);
+      if (own !== undefined) return own;
+
+      const fromSiblings = (start: Element | null): string | undefined => {
+        let sibling = start;
+        while (sibling) {
+          const value = readControl(sibling);
+          if (value !== undefined) return value;
+          sibling = sibling.nextElementSibling;
+        }
+        return undefined;
+      };
+
+      const beside = fromSiblings(node.nextElementSibling);
+      if (beside !== undefined) return beside;
+
+      let child: Element = node;
+      let parent = node.parentElement;
+      while (parent) {
+        const after = fromSiblings(child.nextElementSibling);
+        if (after !== undefined) return after;
+        const wrapped = readControl(parent);
+        if (wrapped !== undefined) return wrapped;
+        child = parent;
+        parent = parent.parentElement;
+      }
+      return '';
+    });
+  }
+
+  /**
+   * Clicks Save and returns the write response when one arrives.
+   * Does not require the dialog to close — a rejected edit stays open.
+   */
+  async attemptSaveProgram(): Promise<Response | undefined> {
+    const responsePromise = this.page.waitForResponse(isProgramWrite, { timeout: 30_000 }).catch(() => undefined);
+
+    await this.editSaveButton.click();
+
+    const outcome = await Promise.race([
+      responsePromise.then((response) => ({ kind: 'response' as const, response })),
+      this.editDialog.waitFor({ state: 'hidden', timeout: 30_000 }).then(() => ({ kind: 'closed' as const, response: undefined })),
+      this.editNameTakenMessage.waitFor({ state: 'visible', timeout: 30_000 }).then(() => ({ kind: 'validation' as const, response: undefined })),
+      this.editMaxLengthMessage.waitFor({ state: 'visible', timeout: 30_000 }).then(() => ({ kind: 'validation' as const, response: undefined })),
+    ]).catch(() => ({ kind: 'timeout' as const, response: undefined }));
+
+    if (outcome.response) return outcome.response;
+    if (outcome.kind === 'validation') {
+      return Promise.race([responsePromise, Promise.resolve(undefined)]);
+    }
+    if (outcome.kind === 'closed' || (await this.editDialog.isHidden())) {
+      return Promise.race([
+        responsePromise,
+        this.page.waitForResponse(isProgramsListGet, { timeout: 15_000 }).then(() => undefined).catch(() => undefined),
+      ]);
+    }
+    return undefined;
   }
 
   async closeEditWithoutSaving(): Promise<void> {
