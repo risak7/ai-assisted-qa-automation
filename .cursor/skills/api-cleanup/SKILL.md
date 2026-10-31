@@ -26,6 +26,8 @@ its UUID and delete it via the API afterwards.
 
 5. Never hardcode the token. Never delete data the test did not create.
 
+6. Do not call `trackProgram` unless the id came from a real, unmocked create (`data.id` on `POST /api/programs`). A `page.route` fulfillment of `POST` or `PATCH` did not persist a row. When a test creates on the real API and only a later save is fulfilled, track that real id and leave the create route unmocked.
+
 ## Reference
 
 - Endpoint: DELETE https://test.didaxis.studio/api/programs/<uuid>?purge=true

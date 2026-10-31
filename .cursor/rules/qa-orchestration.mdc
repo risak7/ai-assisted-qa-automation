@@ -16,15 +16,29 @@ You coordinate the QA subagents. Do the analysis yourself; delegate the rest.
 - Product defect → human approves, then delegate to `bug-reporter`.
 - Test issue → delegate to `test-writer` to propose a fix; a human OKs before it is applied.
 - Environment or flake → stop and report. Do not re-delegate.
+- Accessibility (`@a11y`, `tests/*.a11y.spec.ts`, an `axe-violations.json` attachment, or a warning annotation) is not a red run. Report each violation to the human — rule id, impact, target, help URL — as info for the dev team, then stop. Do not delegate that signal to `triage`, `test-writer`, or `bug-reporter`. A functional failure in the same run is triaged on its own.
 
 ## Ticket → plan
 
 Apply the `jira-ticket-to-gherkin` skill. It opens the live app — Playwright MCP, or the agent-browser CLI then the Playwright CLI when that MCP is unavailable — and writes `features/<ticket-key>.feature` from the ticket and the UI it actually sees. That file is a human checkpoint — stop for QA review before any Playwright code is written.
 
+## Runner stability
+
+`playwright.config.ts` keeps `fullyParallel: true`, `retries: process.env.CI ? 2 : 0` (never above 2), `trace: 'on-first-retry'`, `baseURL` from `process.env.DIDAXIS_URL`, and the setup project plus chromium `storageState` dependency. Do not set `workers: 1`. `use.locale` stays `en-US` and `use.timezoneId` stays `America/Toronto`. Do not substitute another locale or timezone. Specs that assert a relative timestamp freeze time with `page.clock.install` as in `playwright-conventions`. Do not edit specs to paper over the config.
+
 ## Loop guard
 
 At most 3 delegations per task. Never re-run an identical failing spec more than twice — then stop and ask.
 
+## Guardrails
+
+- A human approves every merge and every filed bug. No subagent merges, and `bug-reporter` files only after a human confirms the defect.
+- No subagent edits application source. Fixes to app code go into a bug report, never a patch.
+- Blast radius per specialist:
+  - `test-writer` — writes test code only under `tests/`, `pages/`, and `fixtures/`; never app source, CI config, or other repo paths.
+  - `triage` — read-only; reads logs, artifacts, and repo files and returns a diagnosis; no edits, comments, or tickets.
+  - `bug-reporter` — read-only on the repo; its only side effect is creating or linking one Jira bug.
+
 ## Approval and done
 
-A human approves any merge and any filed bug. Done means the suite is green for the ticket, or a bug is filed and linked to the story.
+A human approves any merge and any filed bug. Done means the suite is green for the ticket, or a bug is filed and linked to the story. Accessibility findings do not block done and are not filed unless a human explicitly asks.

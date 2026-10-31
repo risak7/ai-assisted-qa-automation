@@ -39,5 +39,9 @@ intent; POMs handle mechanics.
 
 7. Import POMs at the top of each spec; instantiate with `new XxxPage(page)`.
 
+8. `page.route` stays in the spec. POM methods stay user actions. Programs-flow network edge cases follow the programs-network-edge-cases skill: fulfill only the call under the UI assertion, and route clicks, fills, and navigation through the existing page objects. One tag per test. A relative-timestamp assertion freezes time in the spec with `page.clock.install({ time: new Date('...') })` before the POM navigation. Page objects do not install the clock.
+
+9. Accessibility specs (`tests/*.a11y.spec.ts`) use those same page objects. The spec has no locators: tab to the POM's primary control, then `toBeFocused()`, Enter, and the POM dialog. A POM may expose `axeIncludeSelector()` only when a scan must scope out a noisy third-party widget; the spec comments why. Follow the a11y-checks skill — one `{ tag: '@a11y' }` per test. Violations are an info report and must not fail CI.
+
 ## Output
 Page Object files in `pages/`. Tests in `tests/` that import them.

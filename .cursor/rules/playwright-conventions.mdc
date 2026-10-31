@@ -1,38 +1,144 @@
 ---
-description: How this project writes Playwright tests — auth, POM, locators, cleanup, data.
+description: How this project writes Playwright tests — auth, POM, locators, cleanup, data, waits, network mocking, accessibility, and anti-flake.
 globs: tests/**
 alwaysApply: false
 ---
 
 # Playwright Conventions
 
-## Auth (from auth-strategy.md)
+## Auth
 
-Stored session by default (`playwright/.auth/user.json` via `tests/auth.setup.ts` and project `storageState`); UI login only for login-page tests. Override with empty storage when the scenario must start logged out:
+Stored session by default (`tests/auth.setup.ts` → `playwright/.auth/user.json`). UI login only when the test is the login page. API login (POST credentials, then inject the token) is for bulk setup, a one-off script, or a stale storageState.
 
 ```typescript
+// Login-page test only
 test.use({ storageState: { cookies: [], origins: [] } });
+await new LoginPage(page).goto();
 ```
 
-## Page Objects (from pom-conventions)
+A feature spec does not call `/login` or write a password into source.
 
-One POM per page/component in `pages/`; locators as `readonly` in the constructor; no assertions in POMs; tests describe intent. Priority: `getByRole` → `getByLabel` / `getByPlaceholder` → `getByText` → `getByTestId` (comment why). Disambiguate with `.filter({ hasText })`, not `.first()`.
+## Page Objects
+
+One class per page or component in `pages/` (`LoginPage`, `ProgramsPage`, `NewProgramModal`). Locators are `readonly` in the constructor. Methods only go, click, fill, or submit. A page composes the components it contains. The spec states intent; every `expect` stays in `tests/`.
 
 ```typescript
-// tests/foo.spec.ts — expect here
-await programs.openNewProgramModal();
-await expect(modal.programNameInput).toBeVisible();
-
-// pages/ProgramsPage.ts — actions only
-async openNewProgramModal() {
-  await this.newProgramButton.click();
-}
+const programs = new ProgramsPage(page);
+await programs.openNewProgramForm();
+await expect(programs.newProgramNameField).toBeVisible();
 ```
 
 ## Locators
 
-Role/label-based; never CSS selectors or XPath; never brittle exact text when a role+name works.
+`getByRole`, then `getByLabel` or `getByPlaceholder`, then `getByText`, then `getByTestId` with a comment on why nothing higher worked. Narrow a multi-match with `.filter({ hasText })`.
 
-## Data & cleanup (from api-cleanup)
+```typescript
+this.dialog = page.getByRole('dialog', { name: 'New Program' });
+this.programNameField = this.dialog.getByLabel('Program Name');
+this.createButton = this.dialog.getByRole('button', { name: 'Create' });
+```
 
-Unique names with `Date.now()` (or similar); every test that creates a program calls `trackProgram(uuid)` and imports `test` from `fixtures/cleanup.fixture.ts`, not `@playwright/test`. Teardown deletes via API (`DELETE /api/programs/<uuid>?purge=true`); never delete data the test did not create.
+No CSS selectors, XPath, brittle copy, or `.first()` on several matches.
+
+## Data and cleanup
+
+Name each created row with `uniqueSuffix()` (`Date.now()` plus a counter from `tests/helpers/didaxis-programs.ts`). Import `test` from `fixtures/cleanup.fixture.ts` and call `trackProgram` with `data.id` from the real create response. The fixture deletes `DELETE /api/programs/<uuid>?purge=true` with `DIDAXIS_API_TOKEN`.
+
+```typescript
+import { expect, test } from '../fixtures/cleanup.fixture';
+import { uniqueSuffix } from './helpers/didaxis-programs';
+
+const programName = `Data Analytics 2026 ${uniqueSuffix()}`;
+trackProgram(await programs.submitCreateProgram());
+```
+
+No manual `afterAll` cleanup, no hardcoded Bearer token, and no `trackProgram` on an id the test did not create.
+
+## Waiting
+
+Wait with a web-first assertion that retries: `expect(locator).toBeVisible()`, `.toBeEnabled()`, or `.toHaveText()`.
+
+```typescript
+await expect(programs.newProgramNameField).toBeVisible();
+await expect(programs.newProgramCreateButton).toBeEnabled();
+```
+
+No `waitForTimeout`, and no one-shot `expect(await locator.isVisible()).toBe(true)`. A fixed sleep ends before the programs list refetches, and a boolean sampled once does not retry.
+
+## Network mocking
+
+Fulfill with `page.route` in the spec only the programs call that produces the UI state under test. Tag the test `{ tag: '@edge' }`. Assert copy already on the page object. Read the live page before writing the sentence. When the app renders nothing, assert `programs.heading` is visible and that no `pageerror` fired.
+
+```typescript
+test('empty list shows the empty state', { tag: '@edge' }, async ({ page }) => {
+  await page.route('**/api/programs', async (route) => {
+    const path = new URL(route.request().url()).pathname.replace(/\/$/, '');
+    if (route.request().method() !== 'GET' || !path.endsWith('/programs')) {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: [] }),
+    });
+  });
+  const programs = new ProgramsPage(page);
+  await programs.goto();
+  await expect(programs.emptyProgramsText).toBeVisible();
+});
+```
+
+The same shape covers `503` on `PATCH /programs/<id>`, a `200` body that is not a program array, and `404` / `400` / `403` / `500` / `501` on save, plus `401` / `502` / `504` / `300` on list load.
+
+Do not mock the endpoint the test claims to verify, fulfill `**/api/programs/**` for every method, `trackProgram` a mocked id, or assert a sentence the live page does not render (`Service Unavailable`).
+
+## Accessibility
+
+Scan in `tests/<feature>.a11y.spec.ts` through `expectNoAxeViolations` with tags `wcag2a` and `wcag2aa`. One `{ tag: '@a11y' }` per test. Run the keyboard path through the POM inside `runCiSoftA11y`. A real violation is an info report (rule id, impact, target, help URL) and must not fail CI.
+
+```typescript
+test('has no WCAG 2 A or AA violations', { tag: '@a11y' }, async ({ page }) => {
+  const programs = new ProgramsPage(page);
+  await programs.goto();
+  await expect(programs.heading).toBeVisible();
+  await expectNoAxeViolations(page, { tags: ['wcag2a', 'wcag2aa'] });
+});
+
+test('Enter on New Program opens the dialog', { tag: '@a11y' }, async ({ page }) => {
+  await runCiSoftA11y('programs-new-program-keyboard', async () => {
+    const programs = new ProgramsPage(page);
+    await programs.goto();
+    await expect(programs.newProgramButton).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(programs.newProgramDialog).toBeVisible();
+  });
+});
+```
+
+No bare `expect(results.violations).toEqual([])` in the spec, no `.disableRules()`, and no `.include()` / `.exclude()` without a comment naming the noisy third-party widget.
+
+## Anti-flake
+
+Keep `fullyParallel: true`, `retries: process.env.CI ? 2 : 0` (never above 2), `trace: 'on-first-retry'`, `baseURL` from `DIDAXIS_URL`, `locale` `en-US`, and `timezoneId` `America/Toronto`. Serialize only the describe that shares one admin. Freeze a relative timestamp with `page.clock.install` before navigation. Page objects do not install the clock.
+
+```typescript
+test.describe('DS-1: Create new academic program', () => {
+  test.describe.configure({ mode: 'serial', timeout: 120_000 });
+
+  test('creates a uniquely named program', async ({ programs, trackProgram }) => {
+    const programName = `Data Analytics 2026 ${uniqueSuffix()}`;
+    trackProgram(await programs.createProgram(programName, 'Full-stack web development program'));
+    await expectProgramInList(programs, programName);
+  });
+});
+
+test('row shows when the program was saved', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-30T16:00:00') });
+  const programs = new ProgramsPage(page);
+  await programs.goto();
+  await expect(programs.programRow('Web Development')).toContainText('2 minutes ago');
+});
+```
+
+Do not set `workers: 1`, `fullyParallel: false`, retries above 2, or another locale or timezone. Do not assert a relative label from `Date.now()` (`just now`, `2 minutes ago`, `today`).

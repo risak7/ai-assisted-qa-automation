@@ -40,6 +40,14 @@ code gets written.
    - Add negative scenarios — what should NOT happen
    - Add edge-case scenarios — boundaries, empty inputs, duplicates,
      special characters, max length
+   - For the programs flow, also add the deterministic API edge cases
+     from the programs-network-edge-cases skill (503 on save, 200 with
+     an empty array, 200 with a malformed payload, plus 404, 401, 403,
+     400, 500, 501, 502, 504, and 300). Describe the observable UI
+     outcome. Do not name `page.route` in the feature file. Then text is
+     only copy you read on the live page in step 2. If the app renders
+     nothing for a case, say so in the scenario or the ambiguities block
+     instead of guessing a string.
 
 4. Write each scenario in Given / When / Then form. `Given` sets the
    starting state, `When` is the action under test, `Then` is the

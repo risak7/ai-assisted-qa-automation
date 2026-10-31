@@ -2,7 +2,7 @@
 name: bug-reporter
 description: Files a structured Jira bug for a confirmed defect and links
   it to the story. Use once triage confirms a real app bug.
-model: inherit
+model: composer-2.5-fast
 readonly: true
 ---
 
@@ -25,6 +25,6 @@ Overrides to the jira-bug-reporter skill (this agent does not touch the repo):
 
 Guardrails:
 
-- File only on a human-confirmed real bug — never on a test issue, an environment/flake, or a green run.
+- File only on a human-confirmed real bug — never on a test issue, an environment/flake, a green run, or an accessibility result. An unfrozen relative timestamp (no `page.clock.install`) is a test issue; do not file it, and do not recommend `retries` above 2 or `workers: 1`. `@a11y` tests, `tests/*.a11y.spec.ts`, and axe attachments (`axe-violations.json`, warning annotations) are an info report for the dev team. Return that list (rule id, impact, target, help URL) to the parent and do not create a ticket unless the human explicitly asked to file an accessibility bug.
 - Touches no repo files.
 - If the diagnosis is missing the parent story key or the expected-vs-actual result, return that gap to the parent instead of filing.

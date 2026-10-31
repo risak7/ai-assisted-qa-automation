@@ -3,7 +3,8 @@ name: a11y-checks
 description: Adds @axe-core/playwright accessibility scans and keyboard
   coverage when generating or reviewing Playwright tests for new pages or
   components. Apply whenever creating, extending, or reviewing UI tests —
-  even if the user does not mention accessibility, a11y, or axe.
+  even if the user does not mention accessibility, a11y, or axe. Real
+  violations are an info report for the dev team and must not fail CI.
 ---
 
 # Accessibility Checks
@@ -35,9 +36,7 @@ await expect(results.violations).toEqual([]);
 - Assert with `expect(results.violations).toEqual([])` — never bare `assert`
   or manual length checks.
 - Scope with `.include()` / `.exclude()` **only** if a third-party widget is
-  noisy, and comment why. Prefer full-page scans for page-level coverage;
-  for a modal/component under test, `.include()` from a role-based POM helper
-  (e.g. `NewProgramModal.axeIncludeSelector()`) is fine.
+  noisy, and comment why. Prefer full-page scans for page-level coverage.
 
 ## Keyboard test (axe cannot do this)
 
@@ -52,18 +51,27 @@ Role-based locators throughout. No inline locators in the spec.
 
 ## Programs page coverage
 
-Add (or keep) both in `tests/programs.a11y.spec.ts` (or equivalent):
+Add (or keep) both in `tests/programs.a11y.spec.ts`:
 
-1. Axe scan of the Programs page with `withTags(['wcag2a','wcag2aa'])`.
+1. Axe scan of the Programs page with `withTags(['wcag2a','wcag2aa'])`, asserted with `expect(results.violations).toEqual([])`.
 2. Keyboard: tab → primary control focused → Enter → New Program dialog open.
 
-**One tag per test.** Drive all interaction through existing POMs.
+**One tag per test:** `{ tag: '@a11y' }` only. Drive all interaction through existing POMs (`ProgramsPage`, `NewProgramModal`). No inline locators in the spec.
 
-## Violations — never silence to go green
+If that file already calls `expectNoAxeViolations` / `runCiSoftA11y`, leave it. Do not add a second bare `expect(results.violations).toEqual([])` next to the helper, and do not change its `.include()` / `.exclude()` scope.
 
-If the scan finds **real** violations, do **not** call `.disableRules()` to make the test pass. Record each violation (rule id, impact, target, help URL, and the failing spec). Those records are input for the bug-reporter skill; file them when they are product defects.
+## Violations are info — they must not turn CI red
 
-`.disableRules()` is allowed only with a comment on the same call that states why the rule does not apply (for example a known third-party false positive). A comment that exists only to turn the suite green is not a reason.
+A real violation is a report for the dev team to cover later. It is not a failed E2E job and it is not a bug to file.
+
+Apply the assertion through `tests/helpers/accessibility.ts`:
+
+- **Scan.** `expectNoAxeViolations(page, { tags: ["wcag2a", "wcag2aa"] })` runs `new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()`. When `CI` is set and violations exist, it attaches `axe-violations.json` (rule id, impact, help, help URL, sample targets), pushes a `warning` annotation, logs the summary, and returns. The test stays green. Locally a non-empty list still fails, which is the same gate as `expect(results.violations).toEqual([])`. Do not also put that bare expect in the spec — a bare expect fails CI.
+- **Keyboard.** Wrap the `toBeFocused()` / Enter / dialog asserts in `runCiSoftA11y`. In CI a failure is attached and annotated; the job stays green. Locally it still asserts.
+
+When you report a run, list each violation: rule id, impact, target, help URL, and the spec name. That list is the info state. Do not call `.disableRules()` to hide a violation. Do not drop the expect to make a local run green. Do not hand the list to bug-reporter.
+
+`.include()` / `.exclude()` stay limited to a noisy third-party widget, with a comment on that call that says why. A comment that exists only to shrink the scan is not a reason.
 
 ## File placement
 
@@ -71,21 +79,22 @@ If the scan finds **real** violations, do **not** call `.disableRules()` to make
 - Or an axe assertion at the end of a functional test that already reaches the UI
 
 Keep axe scans and keyboard asserts in specs, not POMs. POMs may expose
-`axeIncludeSelector()` helpers only.
+`axeIncludeSelector()` only when a scan must scope out a noisy third-party widget.
 
 ## Checklists
 
 Generating:
 
 - [ ] `AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()`
-- [ ] `await expect(results.violations).toEqual([])`
-- [ ] Keyboard path with `toBeFocused()` + Enter opens dialog (where applicable)
-- [ ] POMs only; one tag per test
-- [ ] Real violations recorded for the bug reporter; `.disableRules()` only with a commented reason
+- [ ] `await expect(results.violations).toEqual([])` via `expectNoAxeViolations` (CI stays green; violations attached)
+- [ ] Keyboard path with `toBeFocused()` + Enter opens dialog, via `runCiSoftA11y` where CI must not fail
+- [ ] POMs only; one tag, `{ tag: '@a11y' }`
+- [ ] Real violations listed (rule id, impact, target, help URL) as info for the dev team — not silenced, not filed
 
 Reviewing:
 
 - [ ] New page/component has axe + keyboard coverage
-- [ ] Tags are `wcag2a` / `wcag2aa`
-- [ ] `.disableRules()` appears only with a comment that explains why the rule does not apply
-- [ ] `.include()`/`.exclude()` only for noisy third-party, with comment
+- [ ] Tags are `wcag2a` / `wcag2aa`; the test tag is `@a11y` only
+- [ ] No `.disableRules()` hiding a real violation
+- [ ] `.include()`/`.exclude()` only for noisy third-party, with a comment why
+- [ ] CI path reports violations and does not fail the job

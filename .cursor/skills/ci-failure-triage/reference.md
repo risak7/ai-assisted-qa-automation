@@ -47,7 +47,11 @@ Cross-check in repo:
 |--------|------------------------|
 | UI/API behavior contradicts AC/feature file | App bug → `jira-bug-reporter` |
 | Stale/wrong locator, timing, test data, missing cleanup | Test issue → propose patch |
+| CSS/XPath, `waitForTimeout`, `expect(await locator.isVisible()).toBe(true)`, or `.first()` on a multi-match | Test issue (markup coupling, fixed sleep, non-retrying assert, or ambiguous match) → pom-conventions replacement; not environment/flake |
+| Relative timestamp (`just now`, `N minutes ago`, `today`) with no `page.clock.install`, or a date string that differs only by locale/timezone | Test issue. Freeze time in the spec before navigation. Do not recommend `retries` above 2 or `workers: 1`. Locale is `en-US` and timezone is `America/Toronto` in `playwright.config.ts` `use`. Do not substitute another pair. |
+| `page.route` fulfills the endpoint the test verifies, or the assertion string was not read off the live page | Test issue → programs-network-edge-cases; not an app bug |
 | Secrets/env missing in CI log | Infra/setup — call out in PR; do not file app bug unless user asks |
+| `tests/*.a11y.spec.ts`, tag `@a11y`, `axe-violations.json`, or a warning annotation | Informational a11y — list rule id, impact, target, help URL for the dev team. Not an app bug, not a test patch, not `.disableRules()`. Must not fail CI (`tests/helpers/accessibility.ts`). |
 
 ## PR comment template
 
@@ -58,7 +62,7 @@ Post with `gh pr comment <number> --body-file -` (heredoc) or GitHub MCP:
 
 **Run:** [<run-id>](https://github.com/<owner>/<repo>/actions/runs/<run-id>)
 **Check:** E2E Tests
-**Classification:** App bug | Test issue | Environment
+**Classification:** App bug | Test issue | Environment | Informational a11y
 
 ### Failing test
 `<spec>` — `<test title>`

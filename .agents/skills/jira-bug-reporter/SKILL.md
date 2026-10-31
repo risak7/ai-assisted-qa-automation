@@ -64,6 +64,8 @@ Example: `[Raya] Program list shows stale data after editing program name`
 
 ## Rules
 
+- Accessibility results are not bugs to file. An `@a11y` test, a `tests/*.a11y.spec.ts` failure, or an axe report (`axe-violations.json`, a warning annotation) is an info report for the dev team (rule id, impact, target, help URL). Do not create a Jira issue from it. File an accessibility ticket only when a human explicitly asks.
+- A relative timestamp (`just now`, `N minutes ago`, `today`) that failed because the spec never called `page.clock.install` is a test issue, not a product bug. Do not file it. Do not recommend `retries` above 2 or `workers: 1`.
 - Always verify the failure is reproducible at least twice before reporting
 - Check if a similar bug already exists in Jira as a sub-task to parent story
 - Include the exact Playwright error message in the description
@@ -173,6 +175,7 @@ Verify upload succeeded (script exits 0). If it fails with HTTP 401, the user ne
 - Admin account: values from `DIDAXIS_EMAIL` / `DIDAXIS_PASSWORD` in `.env`
 - Screenshots: `only-on-failure` → `test-results/**/test-failed-1.png`
 - Traces: `trace: "on-first-retry"` — available after a retried failure
+- Config: `fullyParallel: true`, `retries: process.env.CI ? 2 : 0` (never above 2), `baseURL` from `process.env.DIDAXIS_URL`. Do not set `workers: 1`. `use.locale` is `en-US` and `use.timezoneId` is `America/Toronto` in `playwright.config.ts`; the setup project and chromium `storageState` dependency stay as they are. Do not substitute another locale or timezone.
 
 ## Additional resources
 
