@@ -1,5 +1,5 @@
 ---
-description: How to drive a QA ticket or a red build to done by delegating to the test-writer, triage, and bug-reporter subagents.
+description: How to drive a QA ticket, backlog queue, or red build to done by delegating to the test-writer, triage, and bug-reporter subagents.
 alwaysApply: true
 ---
 
@@ -7,9 +7,15 @@ alwaysApply: true
 
 You coordinate the QA subagents. Do the analysis yourself; delegate the rest.
 
+## Skills
+
+- `jira-ticket-to-gherkin` — ticket → Gherkin plan from the live app (see Ticket → plan).
+- `explore-and-generate` — no ticket; find untested UI flows and write one Gherkin plan (see Routing).
+
 ## Routing
 
 - Ticket given → you produce a test plan (below). Do not write Playwright yet.
+- No ticket / "find what we're not testing" / "explore <page>" / "expand coverage" → apply `explore-and-generate`. Do not write Playwright yet.
 - Plan approved → delegate to `test-writer`.
 - Spec returned → run `npx playwright test` on that spec.
 - Run is red → delegate to `triage` with the spec path, error, and run URL or local output.
@@ -22,13 +28,23 @@ You coordinate the QA subagents. Do the analysis yourself; delegate the rest.
 
 Apply the `jira-ticket-to-gherkin` skill. It opens the live app — Playwright MCP, or the agent-browser CLI then the Playwright CLI when that MCP is unavailable — and writes `features/<ticket-key>.feature` from the ticket and the UI it actually sees. That file is a human checkpoint — stop for QA review before any Playwright code is written.
 
+## Backlog mode
+
+Work a queue instead of one ticket. The agent never decides when to start — a Cursor Automation, headless `agent -p` run, or local batch wires the trigger and starts the run.
+
+**Queue:** DS tickets with status "In Progress", title starting with `[Raya +`, and no `tests-generated` label. Cap at **5 tickets per run**.
+
+**Per ticket:** analyze (Ticket → plan) → `test-writer` → `npx playwright test` → `triage` on red. On a repeated identical failure, stop that ticket and move to the next.
+
+**Output:** one PR per ticket, link the ticket in the PR, add the `tests-generated` label so the next run skips it. Never merge or close without a human.
+
 ## Runner stability
 
 `playwright.config.ts` keeps `fullyParallel: true`, `retries: process.env.CI ? 2 : 0` (never above 2), `trace: 'on-first-retry'`, `baseURL` from `process.env.DIDAXIS_URL`, and the setup project plus chromium `storageState` dependency. Do not set `workers: 1`. `use.locale` stays `en-US` and `use.timezoneId` stays `America/Toronto`. Do not substitute another locale or timezone. Specs that assert a relative timestamp freeze time with `page.clock.install` as in `playwright-conventions`. Do not edit specs to paper over the config.
 
 ## Loop guard
 
-At most 3 delegations per task. Never re-run an identical failing spec more than twice — then stop and ask.
+At most 3 delegations per task. Never re-run an identical failing spec more than twice — then stop and ask. In backlog mode, after that stop, move on to the next ticket.
 
 ## Guardrails
 
@@ -41,4 +57,4 @@ At most 3 delegations per task. Never re-run an identical failing spec more than
 
 ## Approval and done
 
-A human approves any merge and any filed bug. Done means the suite is green for the ticket, or a bug is filed and linked to the story. Accessibility findings do not block done and are not filed unless a human explicitly asks.
+A human approves any merge and any filed bug. Done means the suite is green for the ticket, or a bug is filed and linked to the story. Accessibility findings do not block done and are not filed unless a human explicitly asks. In backlog mode, done for a ticket also means a PR is open, the ticket is linked, and `tests-generated` is applied — still no merge or close without a human.
