@@ -23,7 +23,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - run: npm ci
@@ -35,18 +35,45 @@ jobs:
           curl https://cursor.com/install -fsS | bash
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      - name: Verify Jira API credentials
+        env:
+          ATLASSIAN_EMAIL: ${{ secrets.ATLASSIAN_EMAIL }}
+          ATLASSIAN_API_TOKEN: ${{ secrets.ATLASSIAN_API_TOKEN }}
+          ATLASSIAN_BASE_URL: https://legionqaschool.atlassian.net
+        run: |
+          if [ -z "${ATLASSIAN_EMAIL}" ] || [ -z "${ATLASSIAN_API_TOKEN}" ]; then
+            echo "ATLASSIAN_EMAIL and ATLASSIAN_API_TOKEN must both be set. DIDAXIS_EMAIL is not a Jira account."
+            exit 1
+          fi
+          status="$(curl -sS -o /tmp/jira-myself.json -w "%{http_code}" \
+            -u "${ATLASSIAN_EMAIL}:${ATLASSIAN_API_TOKEN}" \
+            "${ATLASSIAN_BASE_URL}/rest/api/3/myself")"
+          if [ "${status}" != "200" ]; then
+            echo "Jira GET /rest/api/3/myself returned HTTP ${status}."
+            echo "ATLASSIAN_API_TOKEN must be an API token for ATLASSIAN_EMAIL. Password auth is not accepted."
+            exit 1
+          fi
+          echo "Jira API authentication succeeded."
+
       - name: Run backlog test generation
         env:
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          ATLASSIAN_EMAIL: ${{ secrets.ATLASSIAN_EMAIL }}
           ATLASSIAN_API_TOKEN: ${{ secrets.ATLASSIAN_API_TOKEN }}
+          ATLASSIAN_BASE_URL: https://legionqaschool.atlassian.net
+          JIRA_LOGIN_EMAIL: ${{ secrets.ATLASSIAN_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.ATLASSIAN_API_TOKEN }}
+          JIRA_SITE: legionqaschool.atlassian.net
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           agent -p --force --trust --output-format text "$(cat <<'EOF'
           Run Backlog mode for this repo. Work up to 5 DS tickets that are status "In Progress", title starts with "[Raya +", and do not have the "tests-generated" label.
 
+          Authenticate to Jira Cloud REST with ATLASSIAN_EMAIL and ATLASSIAN_API_TOKEN. The same values are also exposed as JIRA_LOGIN_EMAIL and JIRA_API_TOKEN. The site is ATLASSIAN_BASE_URL (JIRA_SITE). Do not use DIDAXIS_EMAIL for Jira. Interactive Atlassian MCP login is not available on this runner. If GET /rest/api/3/myself is not HTTP 200, stop and exit non-zero.
+
           Per ticket: analyze the ticket against the live app; write a conforming Playwright spec under tests/ (and pages/fixtures as needed); run npx playwright test on that spec; open one PR linked to the ticket; add the "tests-generated" label so the next run skips it.
 
-          On a repeated identical failure, stop that ticket and move on. Never merge or close without a human. Never edit application product source.
+          On a repeated identical failure, stop that ticket and move on. Never merge or close without a human. Never edit application product source. If the queue is empty, say so and exit zero.
           EOF
           )"
 
