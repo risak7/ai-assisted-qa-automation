@@ -25,7 +25,7 @@ async function expectDuplicateNameNotAdded(
 
   const rowCount = await programs.countProgramRowsNamed(listedName);
   if (rowCount === 1) {
-    await expect(programs.duplicateNameMessage.or(programs.newProgramDialog)).not.Visible();
+    await expect(programs.duplicateNameMessage.or(programs.newProgramDialog)).not.toBeVisible();
   }
 }
 
