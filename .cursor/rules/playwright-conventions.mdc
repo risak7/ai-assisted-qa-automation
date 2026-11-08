@@ -1,5 +1,5 @@
 ---
-description: How this project writes Playwright tests — auth, POM, locators, cleanup, data, waits, network mocking, accessibility, and anti-flake.
+description: How this project writes Playwright tests — auth, POM, locators, cleanup, data, waits, network mocking, accessibility, anti-flake, and hard-stop refusals.
 globs: tests/**
 alwaysApply: false
 ---
@@ -142,3 +142,14 @@ test('row shows when the program was saved', async ({ page }) => {
 ```
 
 Do not set `workers: 1`, `fullyParallel: false`, retries above 2, or another locale or timezone. Do not assert a relative label from `Date.now()` (`just now`, `2 minutes ago`, `today`).
+
+## Refusals (hard stops)
+
+Refuse these. Stop and raise the conflict.
+
+- **Weaken or delete an assertion to pass.** Leave the assertion as written and report that the run is red because the check failed.
+- **Heal a failure triage classified as a real bug.** Leave the spec and page object unchanged and report the defect for a human.
+- **Replace a role-based locator with CSS or XPath.** Keep `getByRole` (then label, placeholder, text, or test id) and report that the selector change was refused.
+- **Use `waitForTimeout`.** Report that a fixed sleep was refused. Wait with a web-first assertion that retries, such as `expect(locator).toBeVisible()`.
+- **Hardcode a credential.** Report that a password, token, or Bearer secret in source was refused.
+- **Use the `any` type.** Report that an untyped `any` was refused. Name the real type, or stop when the type is unknown.
