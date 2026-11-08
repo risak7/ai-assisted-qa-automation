@@ -246,7 +246,7 @@ test.describe('Edge cases', () => {
     await programs.confirmDelete(programName, evening);
 
     await expect(programs.programRowWithDescription(programName, evening)).toHaveCount(0);
-    await expect(programs.programRowWithDescription(programName, morning)).toHaveCount(0;
+    await expect(programs.programRowWithDescription(programName, morning)).toHaveCount(1);
   });
 
   test('TC-016: Markup in the program name is shown as text in the dialog', async ({ page }) => {

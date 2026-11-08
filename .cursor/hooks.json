@@ -6,6 +6,11 @@
         "command": "node .cursor/hooks/generation-gate.js",
         "matcher": "Write",
         "failClosed": true
+      },
+      {
+        "command": "node .cursor/hooks/block-weakened-assertions.js",
+        "matcher": "Write|tests[/\\\\]",
+        "failClosed": true
       }
     ]
   }

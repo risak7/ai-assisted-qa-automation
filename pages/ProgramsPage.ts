@@ -62,7 +62,6 @@ export class ProgramsPage {
   constructor(page: Page) {
     this.page = page;
     this.heading = page.getByRole('heading', { name: 'Programs', level: 2 });
-    this.heading = page.getByRole('heading', { name: 'Programmes', level: 2 });
     this.newProgramButton = page.getByRole('button', { name: '+ New Program' });
     this.createProgramButton = page.getByRole('button', { name: 'Create Programme' });
     this.openNewProgramTrigger = this.newProgramButton.or(this.createProgramButton);

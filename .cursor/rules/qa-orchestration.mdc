@@ -1,5 +1,5 @@
 ---
-description: How to drive a QA ticket, backlog queue, or red build to done by delegating to the test-writer, triage, and bug-reporter subagents.
+description: How to drive a QA ticket, backlog queue, or red build to done by delegating to the test-writer, triage, and bug-reporter subagents, and by applying self-heal on locator drift.
 alwaysApply: true
 ---
 
@@ -11,6 +11,7 @@ You coordinate the QA subagents. Do the analysis yourself; delegate the rest.
 
 - `jira-ticket-to-gherkin` — ticket → Gherkin plan from the live app (see Ticket → plan).
 - `explore-and-generate` — no ticket; find untested UI flows and write one Gherkin plan (see Routing).
+- `self-heal` — locator drift on a red run → repair the POM locator and open a PR (see Heal on red). Use it only after `triage` classifies the failure as a test issue (drift).
 
 ## Routing
 
@@ -18,11 +19,22 @@ You coordinate the QA subagents. Do the analysis yourself; delegate the rest.
 - No ticket / "find what we're not testing" / "explore <page>" / "expand coverage" → apply `explore-and-generate`. Do not write Playwright yet.
 - Plan approved → delegate to `test-writer`.
 - Spec returned → run `npx playwright test` on that spec.
-- Run is red → delegate to `triage` with the spec path, error, and run URL or local output.
-- Product defect → human approves, then delegate to `bug-reporter`.
-- Test issue → delegate to `test-writer` to propose a fix; a human OKs before it is applied.
-- Environment or flake → stop and report. Do not re-delegate.
+- Run is red → Heal on red. Delegate to `triage` before any edit.
+- Other test issue (not locator drift) → delegate to `test-writer` to propose a fix; a human OKs before it is applied.
+- Environment or flake → stop and report. Do not re-delegate. Do not heal.
 - Accessibility (`@a11y`, `tests/*.a11y.spec.ts`, an `axe-violations.json` attachment, or a warning annotation) is not a red run. Report each violation to the human — rule id, impact, target, help URL — as info for the dev team, then stop. Do not delegate that signal to `triage`, `test-writer`, or `bug-reporter`. A functional failure in the same run is triaged on its own.
+
+## Heal on red
+
+On a red run, delegate to `triage` with the spec path, error, and run URL or local output. Do not edit until triage classifies the failure.
+
+- **Drift (test issue)** → apply `self-heal`. Re-discover the element with the Playwright MCP, or the agent-browser CLI, or the Playwright CLI. Patch that one locator in the POM. Re-run `npx playwright test <spec> -g "<title>"` and prove green with assertions unchanged, then open a repair PR linked to the run. Do not merge it.
+- **Real app bug** → delegate to `bug-reporter` to file and link it. Never heal a bug.
+- **Anything else** (environment, flake, informational a11y, copy or timestamp drift) → stop and report. Do not heal.
+
+Budget: at most **5 heals per run**. Each heal is one locator. If a heal will not prove green with assertions unchanged, revert the POM, stop, and escalate to the human. Do not try a second selector, and do not spend another heal on that same failure.
+
+Never heal an assertion. Do not edit `tests/`, expected copy, matchers, or tags. `git diff -- tests/` stays empty. A green run that depends on a removed, loosened, or rewritten assertion is a bug: revert and escalate to `bug-reporter`. Never merge a repair without a human.
 
 ## Ticket → plan
 
@@ -34,7 +46,7 @@ Work a queue instead of one ticket. The agent never decides when to start — a 
 
 **Queue:** DS tickets with status "In Progress", title starting with `[Raya +`, and no `tests-generated` label. Cap at **5 tickets per run**.
 
-**Per ticket:** analyze (Ticket → plan) → `test-writer` → `npx playwright test` → `triage` on red. On a repeated identical failure, stop that ticket and move to the next.
+**Per ticket:** analyze (Ticket → plan) → `test-writer` → `npx playwright test` → Heal on red. On a repeated identical failure, stop that ticket and move to the next. The 5-heal budget is per run, not per ticket.
 
 **Output:** one PR per ticket, link the ticket in the PR, add the `tests-generated` label so the next run skips it. Never merge or close without a human.
 
@@ -44,12 +56,12 @@ Work a queue instead of one ticket. The agent never decides when to start — a 
 
 ## Loop guard
 
-At most 3 delegations per task. Never re-run an identical failing spec more than twice — then stop and ask. In backlog mode, after that stop, move on to the next ticket.
+At most 3 delegations per task. Heal on red adds a separate cap of 5 heals per run; a heal that does not prove green stops and escalates instead of another attempt. Never re-run an identical failing spec more than twice — then stop and ask. In backlog mode, after that stop, move on to the next ticket.
 
 ## Guardrails
 
-- A human approves every merge and every filed bug. No subagent merges, and `bug-reporter` files only after a human confirms the defect.
-- No subagent edits application source. Fixes to app code go into a bug report, never a patch.
+- A human approves every merge and every filed bug. No subagent merges. Never merge a repair without a human. `bug-reporter` files a real app bug and links it to the story; it does not heal, and it still files only after a human confirms the defect.
+- No subagent edits application source. Fixes to app code go into a bug report, never a patch. Never heal an assertion — a drift repair changes one POM locator and leaves `tests/` untouched.
 - Blast radius per specialist:
   - `test-writer` — writes test code only under `tests/`, `pages/`, and `fixtures/`; never app source, CI config, or other repo paths.
   - `triage` — read-only; reads logs, artifacts, and repo files and returns a diagnosis; no edits, comments, or tickets.
@@ -57,4 +69,4 @@ At most 3 delegations per task. Never re-run an identical failing spec more than
 
 ## Approval and done
 
-A human approves any merge and any filed bug. Done means the suite is green for the ticket, or a bug is filed and linked to the story. Accessibility findings do not block done and are not filed unless a human explicitly asks. In backlog mode, done for a ticket also means a PR is open, the ticket is linked, and `tests-generated` is applied — still no merge or close without a human.
+A human approves any merge and any filed bug. Done means the suite is green for the ticket, or a bug is filed and linked to the story. A drift repair is done only when the spec is green with assertions unchanged and a repair PR linked to the run is open — a human merges it. Accessibility findings do not block done and are not filed unless a human explicitly asks. In backlog mode, done for a ticket also means a PR is open, the ticket is linked, and `tests-generated` is applied — still no merge or close without a human.
