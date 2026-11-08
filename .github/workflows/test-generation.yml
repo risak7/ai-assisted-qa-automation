@@ -71,9 +71,9 @@ jobs:
 
           Authenticate to Jira Cloud REST with ATLASSIAN_EMAIL and ATLASSIAN_API_TOKEN. The same values are also exposed as JIRA_LOGIN_EMAIL and JIRA_API_TOKEN. The site is ATLASSIAN_BASE_URL (JIRA_SITE). Do not use DIDAXIS_EMAIL for Jira. Interactive Atlassian MCP login is not available on this runner. If GET /rest/api/3/myself is not HTTP 200, stop and exit non-zero.
 
-          Per ticket: analyze the ticket against the live app; write a conforming Playwright spec under tests/ (and pages/fixtures as needed); run npx playwright test on that spec; open one PR linked to the ticket; add the "tests-generated" label so the next run skips it.
+          Per ticket: analyze the ticket against the live app; write a conforming Playwright spec under tests/ (and pages/fixtures as needed); run npx playwright test on that spec. If that run is red, always perform self-heal before opening the PR or moving on: delegate to triage, and when the failure is locator drift repair that one POM locator, re-run the same spec with assertions unchanged, and include the repair in the ticket PR. Do not skip self-heal on a red run. Then open one PR linked to the ticket and add the "tests-generated" label so the next run skips it.
 
-          On a repeated identical failure, stop that ticket and move on. Never merge or close without a human. Never edit application product source. If the queue is empty, say so and exit zero.
+          On a repeated identical failure after that heal, stop that ticket and move on. Never merge or close without a human. Never edit application product source. If the queue is empty, say so and exit zero.
           EOF
           )"
 
