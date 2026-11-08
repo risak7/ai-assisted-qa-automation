@@ -2,6 +2,7 @@ Feature: Create new academic program
   DS-270 — As an admin user, create a new academic program so that I can begin designing its curriculum structure.
 
   # Observed on live app (https://test.didaxis.studio/programs):
+  # Live-verified 2026-11-08 against https://test.didaxis.studio/programs (Programs h2, "+ New Program", dialog "New Program", Create disabled when Program Name empty/whitespace).
   # - Programs heading (h2), button "+ New Program"
   # - Dialog "New Program" with labels: Program Name *, Description, Total Program Hours,
   #   Default Session Hours, Default Exam Hours, Target Audience, Focus Areas
