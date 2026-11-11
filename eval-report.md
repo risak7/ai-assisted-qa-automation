@@ -1,6 +1,6 @@
 # Suite reliability eval report
 
-Generated: 2026-11-11T02:31:53.430Z  
+Generated: 2026-11-11T02:39:48.756Z  
 Trigger: `test-generation`  
 CI window: last 30 `e2e.yml` workflow runs
 
@@ -11,7 +11,7 @@ CI window: last 30 `e2e.yml` workflow runs
 | Metric | Value |
 |--------|-------|
 | Unique tests that passed only on retry | **0** |
-| E2E workflow runs in window | 30 (logs fetched for 23) |
+| E2E workflow runs in window | 30 (logs fetched for 24) |
 | Flake rate (flaky tests ÷ runs) | **0.0%** |
 
 **How measured:** Parsed last 30 `e2e.yml` runs via `gh run view --log`, counting unique test titles that show Playwright `(retry #n)` (CI `retries: 2` in playwright.config.ts).
@@ -34,8 +34,8 @@ CI window: last 30 `e2e.yml` workflow runs
 
 | Metric | Value |
 |--------|-------|
-| First-PR passes (green + conforming + maps-to-AC) | **0 / 12** |
-| Pass rate | **0.0%** |
+| First-PR passes (green + conforming + maps-to-AC) | **1 / 12** |
+| Pass rate | **8.3%** |
 
 **How measured:** PRs from `test/*` or `cursor/*` branches or DS-* titles. Pass = earliest `e2e.yml` run on the PR branch succeeded, constitution WON'T scan clean on new specs, and matching `features/DS-*.feature` contains `@AC-` tags with related spec files.
 
