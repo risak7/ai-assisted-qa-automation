@@ -1,7 +1,7 @@
 # Suite reliability eval report
 
-Generated: 2026-11-11T01:25:07.750Z  
-Trigger: `local-session`  
+Generated: 2026-11-11T01:41:01.459Z  
+Trigger: `test-generation`  
 CI window: last 30 `e2e.yml` workflow runs
 
 > Cursor has no built-in reliability telemetry. Metrics below are derived from GitHub Actions logs, pull-request history, constitution scans, and local agent session transcripts.
@@ -10,21 +10,21 @@ CI window: last 30 `e2e.yml` workflow runs
 
 | Metric | Value |
 |--------|-------|
-| Unique tests that passed only on retry | **97** |
-| E2E workflow runs in window | 27 (logs fetched for 25) |
-| Flake rate (flaky tests ÷ runs) | **359.3%** |
+| Unique tests that passed only on retry | **0** |
+| E2E workflow runs in window | 30 (logs fetched for 26) |
+| Flake rate (flaky tests ÷ runs) | **0.0%** |
 
 **How measured:** Parsed last 30 `e2e.yml` runs via `gh run view --log`, counting unique test titles that show Playwright `(retry #n)` (CI `retries: 2` in playwright.config.ts).
 
-**What it tells us:** Some tests only passed after retry — investigate env timing or tighten waits before raising retries.
+**What it tells us:** No retry-only passes detected in the sampled CI window — suite looks stable or logs omit retries.
 
 ## Heal success rate
 
 | Metric | Value |
 |--------|-------|
-| Heal PRs (clean / total) | **0 / 2** |
+| Heal PRs (clean / total) | **0 / 3** |
 | Heal success rate | **0.0%** |
-| Masked regressions (must be 0) | **1** |
+| Masked regressions (must be 0) | **2** |
 
 **How measured:** GitHub PRs whose branch starts with `heal/` (or title mentions heal). Clean = smoke/E2E check passed and no `tests/**` or `features/**` diff (POM-only per self-heal policy). Masked regression = heal PR that touched spec/feature files.
 
@@ -34,7 +34,7 @@ CI window: last 30 `e2e.yml` workflow runs
 
 | Metric | Value |
 |--------|-------|
-| First-PR passes (green + conforming + maps-to-AC) | **0 / 8** |
+| First-PR passes (green + conforming + maps-to-AC) | **0 / 10** |
 | Pass rate | **0.0%** |
 
 **How measured:** PRs from `test/*` or `cursor/*` branches or DS-* titles. Pass = earliest `e2e.yml` run on the PR branch succeeded, constitution WON'T scan clean on new specs, and matching `features/DS-*.feature` contains `@AC-` tags with related spec files.
@@ -45,11 +45,11 @@ CI window: last 30 `e2e.yml` workflow runs
 
 | Metric | Value |
 |--------|-------|
-| Times agent asked (AskQuestion + hooks) | **2** |
+| Times agent asked (AskQuestion + hooks) | **0** |
 | Times agent likely invented a value (heuristic) | **0** |
-| Ask ratio (asks ÷ asks+guesses) | **100.0%** |
+| Ask ratio (asks ÷ asks+guesses) | **n/a** |
 
-**How measured:** Session review: 65 Cursor agent transcript `.jsonl` files under `C:\Users\raysa\.cursor\projects\c-GIT-Legion-Automation-ai-assisted-qa-automation\agent-transcripts` (last 30d) — count `AskQuestion` tool uses + `.eval/telemetry.json` hook tally; guesses use assistant phrasing heuristics (`assuming`, `defaulting to`, etc.). No built-in Cursor telemetry.
+**How measured:** Session review: 0 Cursor agent transcript `.jsonl` files under `/home/runner/.cursor/projects/c-GIT-Legion-Automation-ai-assisted-qa-automation/agent-transcripts` (last 30d) — count `AskQuestion` tool uses + `.eval/telemetry.json` hook tally; guesses use assistant phrasing heuristics (`assuming`, `defaulting to`, etc.). No built-in Cursor telemetry.
 
 **What it tells us:** Agents lean toward asking — keep AskQuestion for env, ticket scope, and merge approvals.
 
