@@ -1,6 +1,6 @@
 # Suite reliability eval report
 
-Generated: 2026-11-11T01:25:07.750Z  
+Generated: 2026-11-11T02:17:36.915Z  
 Trigger: `local-session`  
 CI window: last 30 `e2e.yml` workflow runs
 
@@ -10,21 +10,21 @@ CI window: last 30 `e2e.yml` workflow runs
 
 | Metric | Value |
 |--------|-------|
-| Unique tests that passed only on retry | **97** |
-| E2E workflow runs in window | 27 (logs fetched for 25) |
-| Flake rate (flaky tests ÷ runs) | **359.3%** |
+| Unique tests that passed only on retry | **0** |
+| E2E workflow runs in window | 30 (logs fetched for 25) |
+| Flake rate (flaky tests ÷ runs) | **0.0%** |
 
 **How measured:** Parsed last 30 `e2e.yml` runs via `gh run view --log`, counting unique test titles that show Playwright `(retry #n)` (CI `retries: 2` in playwright.config.ts).
 
-**What it tells us:** Some tests only passed after retry — investigate env timing or tighten waits before raising retries.
+**What it tells us:** No retry-only passes detected in the sampled CI window — suite looks stable or logs omit retries.
 
 ## Heal success rate
 
 | Metric | Value |
 |--------|-------|
-| Heal PRs (clean / total) | **0 / 2** |
+| Heal PRs (clean / total) | **0 / 3** |
 | Heal success rate | **0.0%** |
-| Masked regressions (must be 0) | **1** |
+| Masked regressions (must be 0) | **2** |
 
 **How measured:** GitHub PRs whose branch starts with `heal/` (or title mentions heal). Clean = smoke/E2E check passed and no `tests/**` or `features/**` diff (POM-only per self-heal policy). Masked regression = heal PR that touched spec/feature files.
 
@@ -34,7 +34,7 @@ CI window: last 30 `e2e.yml` workflow runs
 
 | Metric | Value |
 |--------|-------|
-| First-PR passes (green + conforming + maps-to-AC) | **0 / 8** |
+| First-PR passes (green + conforming + maps-to-AC) | **0 / 10** |
 | Pass rate | **0.0%** |
 
 **How measured:** PRs from `test/*` or `cursor/*` branches or DS-* titles. Pass = earliest `e2e.yml` run on the PR branch succeeded, constitution WON'T scan clean on new specs, and matching `features/DS-*.feature` contains `@AC-` tags with related spec files.

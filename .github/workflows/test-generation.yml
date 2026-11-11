@@ -50,7 +50,24 @@ jobs:
             exit 1
           fi
 
+      - name: Check backlog queue
+        id: queue
+        env:
+          ATLASSIAN_EMAIL: ${{ secrets.ATLASSIAN_EMAIL }}
+          ATLASSIAN_API_TOKEN: ${{ secrets.ATLASSIAN_API_TOKEN }}
+        run: |
+          jql='project = DS AND status = "In Progress" AND summary ~ "\\[Raya +" AND (labels is EMPTY OR labels not in (tests-generated)) ORDER BY key ASC'
+          total="$(curl -sf -u "${ATLASSIAN_EMAIL}:${ATLASSIAN_API_TOKEN}" \
+            -H "Accept: application/json" \
+            -G "https://legionqaschool.atlassian.net/rest/api/3/search" \
+            --data-urlencode "jql=${jql}" \
+            --data-urlencode "maxResults=0" \
+            | jq -r '.total // 0')"
+          echo "count=${total}" >> "$GITHUB_OUTPUT"
+          echo "Eligible backlog tickets: ${total}"
+
       - name: Work the In Progress backlog
+        if: ${{ steps.queue.outputs.count != '0' }}
         env:
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
           ATLASSIAN_EMAIL: ${{ secrets.ATLASSIAN_EMAIL }}
@@ -65,14 +82,33 @@ jobs:
           For each ticket:
           1. Analyze the ticket, including live UI recon when DIDAXIS_EMAIL and DIDAXIS_PASSWORD are set.
           2. Write a conforming Playwright spec under tests/. Page objects and fixtures only under pages/ and fixtures/. Do not edit application source.
-          3. Run that spec with npx playwright test.
-          4. If the same spec fails the same way again, stop that ticket and move on. Do not retry it.
+          3. Run that spec with npx playwright test. On red, Heal on red (triage then .cursor/skills/self-heal/SKILL.md) before opening the PR; at most 5 heals total this workflow run.
+          4. If the same spec fails the same way again after heal, stop that ticket and move on. Do not retry it.
           5. Open one pull request linked to the ticket. Put the DS key in the title and body.
           6. Add the tests-generated label on the Jira ticket so the next run skips it.
 
           Never merge a pull request. Never close or transition the ticket. A human approves every merge and every filed bug.
 
           Use ATLASSIAN_EMAIL with ATLASSIAN_API_TOKEN for Jira (API token auth). Use GITHUB_TOKEN for git and pull requests.
+          EOF
+          )"
+
+      - name: Self-heal suite (no backlog tickets)
+        if: ${{ steps.queue.outputs.count == '0' }}
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          agent -p --force --trust --output-format text "$(cat <<'EOF'
+          No eligible DS backlog tickets (In Progress, title "[Raya +", no tests-generated label). Follow .cursor/rules/qa-orchestration.mdc Heal on red and .cursor/skills/self-heal/SKILL.md.
+
+          Run npx playwright test. If the suite is green, report that the queue is empty and the suite is green; exit 0.
+
+          If red: triage each functional failure. For locator drift, self-heal one POM locator per failure (max 5 heals this run). Re-run each affected spec with assertions unchanged (git diff -- tests/ must stay empty). Open one heal/ pull request per repair linked to this workflow run. Never merge.
+
+          On product defect, environment or flake, or copy or timestamp drift: stop and report; do not heal. Informational a11y findings are not a red run — report and continue.
+
+          Use GITHUB_TOKEN for git and pull requests.
           EOF
           )"
 
