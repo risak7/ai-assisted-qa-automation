@@ -1,8 +1,9 @@
-name: Test Generation
+name: Test generation
 
 on:
-  schedule:
-    - cron: '0 6 * * 1-5'
+  # schedule:
+  #   # 06:00 UTC, Monday–Friday
+  #   - cron: "0 6 * * 1-5"
   workflow_dispatch:
 
 permissions:
@@ -12,18 +13,19 @@ permissions:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 180
     env:
       DIDAXIS_URL: ${{ secrets.DIDAXIS_URL }}
       DIDAXIS_EMAIL: ${{ secrets.DIDAXIS_EMAIL }}
       DIDAXIS_PASSWORD: ${{ secrets.DIDAXIS_PASSWORD }}
       DIDAXIS_API_TOKEN: ${{ secrets.DIDAXIS_API_TOKEN }}
+
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
           cache: npm
 
       - run: npm ci
@@ -39,41 +41,38 @@ jobs:
         env:
           ATLASSIAN_EMAIL: ${{ secrets.ATLASSIAN_EMAIL }}
           ATLASSIAN_API_TOKEN: ${{ secrets.ATLASSIAN_API_TOKEN }}
-          ATLASSIAN_BASE_URL: https://legionqaschool.atlassian.net
         run: |
-          if [ -z "${ATLASSIAN_EMAIL}" ] || [ -z "${ATLASSIAN_API_TOKEN}" ]; then
-            echo "ATLASSIAN_EMAIL and ATLASSIAN_API_TOKEN must both be set. DIDAXIS_EMAIL is not a Jira account."
-            exit 1
-          fi
-          status="$(curl -sS -o /tmp/jira-myself.json -w "%{http_code}" \
+          code="$(curl -s -o /dev/null -w '%{http_code}' \
             -u "${ATLASSIAN_EMAIL}:${ATLASSIAN_API_TOKEN}" \
-            "${ATLASSIAN_BASE_URL}/rest/api/3/myself")"
-          if [ "${status}" != "200" ]; then
-            echo "Jira GET /rest/api/3/myself returned HTTP ${status}."
-            echo "ATLASSIAN_API_TOKEN must be an API token for ATLASSIAN_EMAIL. Password auth is not accepted."
+            "https://legionqaschool.atlassian.net/rest/api/3/myself")"
+          if [ "$code" != "200" ]; then
+            echo "::error::Jira REST auth failed (HTTP ${code}). Use ATLASSIAN_EMAIL + API token, not account password."
             exit 1
           fi
-          echo "Jira API authentication succeeded."
 
-      - name: Run backlog test generation
+      - name: Work the In Progress backlog
         env:
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
           ATLASSIAN_EMAIL: ${{ secrets.ATLASSIAN_EMAIL }}
           ATLASSIAN_API_TOKEN: ${{ secrets.ATLASSIAN_API_TOKEN }}
-          ATLASSIAN_BASE_URL: https://legionqaschool.atlassian.net
-          JIRA_LOGIN_EMAIL: ${{ secrets.ATLASSIAN_EMAIL }}
-          JIRA_API_TOKEN: ${{ secrets.ATLASSIAN_API_TOKEN }}
-          JIRA_SITE: legionqaschool.atlassian.net
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           agent -p --force --trust --output-format text "$(cat <<'EOF'
-          Run Backlog mode for this repo. Work up to 5 DS tickets that are status "In Progress", title starts with "[Raya +", and do not have the "tests-generated" label.
+          Backlog mode. This workflow is the external trigger. Follow .cursor/rules/qa-orchestration.mdc.
 
-          Authenticate to Jira Cloud REST with ATLASSIAN_EMAIL and ATLASSIAN_API_TOKEN. The same values are also exposed as JIRA_LOGIN_EMAIL and JIRA_API_TOKEN. The site is ATLASSIAN_BASE_URL (JIRA_SITE). Do not use DIDAXIS_EMAIL for Jira. Interactive Atlassian MCP login is not available on this runner. If GET /rest/api/3/myself is not HTTP 200, stop and exit non-zero.
+          Work DS tickets in status "In Progress", title starting with "[Raya +", without the tests-generated label. Take at most 5 tickets, lowest key first.
 
-          Per ticket: analyze the ticket against the live app; write a conforming Playwright spec under tests/ (and pages/fixtures as needed); run npx playwright test on that spec. If that run is red, always perform self-heal before opening the PR or moving on: delegate to triage, and when the failure is locator drift repair that one POM locator, re-run the same spec with assertions unchanged, and include the repair in the ticket PR. Do not skip self-heal on a red run. Then open one PR linked to the ticket and add the "tests-generated" label so the next run skips it.
+          For each ticket:
+          1. Analyze the ticket, including live UI recon when DIDAXIS_EMAIL and DIDAXIS_PASSWORD are set.
+          2. Write a conforming Playwright spec under tests/. Page objects and fixtures only under pages/ and fixtures/. Do not edit application source.
+          3. Run that spec with npx playwright test.
+          4. If the same spec fails the same way again, stop that ticket and move on. Do not retry it.
+          5. Open one pull request linked to the ticket. Put the DS key in the title and body.
+          6. Add the tests-generated label on the Jira ticket so the next run skips it.
 
-          On a repeated identical failure after that heal, stop that ticket and move on. Never merge or close without a human. Never edit application product source. If the queue is empty, say so and exit zero.
+          Never merge a pull request. Never close or transition the ticket. A human approves every merge and every filed bug.
+
+          Use ATLASSIAN_EMAIL with ATLASSIAN_API_TOKEN for Jira (API token auth). Use GITHUB_TOKEN for git and pull requests.
           EOF
           )"
 
@@ -83,3 +82,18 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+      - name: Suite reliability eval report
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run eval:report -- --trigger=test-generation --ci-runs=30
+
+      - name: Commit eval report
+        if: ${{ !cancelled() }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add eval-report.md .eval/telemetry.json 2>/dev/null || git add eval-report.md
+          git diff --staged --quiet || git commit -m "chore: refresh suite reliability eval report"
+          git push

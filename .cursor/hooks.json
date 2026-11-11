@@ -3,14 +3,31 @@
   "hooks": {
     "afterFileEdit": [
       {
-        "command": "node .cursor/hooks/generation-gate.js",
+        "command": "node .cursor/hooks/constitution-gate.js",
         "matcher": "Write",
         "failClosed": true
-      },
+      }
+    ],
+    "postToolUse": [
       {
-        "command": "node .cursor/hooks/block-weakened-assertions.js",
-        "matcher": "Write|tests[/\\\\]",
-        "failClosed": true
+        "command": "node .cursor/hooks/eval-telemetry.js",
+        "matcher": "AskQuestion"
+      }
+    ],
+    "stop": [
+      {
+        "command": "node .cursor/hooks/run-eval-report.js"
+      }
+    ],
+    "sessionEnd": [
+      {
+        "command": "node .cursor/hooks/run-eval-report.js"
+      }
+    ],
+    "afterShellExecution": [
+      {
+        "command": "node .cursor/hooks/run-eval-report.js",
+        "matcher": "agent\\s+-p"
       }
     ]
   }

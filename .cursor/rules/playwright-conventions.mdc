@@ -6,6 +6,52 @@ alwaysApply: false
 
 # Playwright Conventions
 
+## Tagging
+
+Every `test` carries **exactly one** Playwright suite tag — never on `test.describe`. Pick the slice that best describes **why** the test runs, not the ticket id (use the title or file name for traceability).
+
+| Tag | Use when |
+|-----|----------|
+| `@smoke` | Minimal critical path after deploy or auth setup |
+| `@sanity` | Short post-change check of one feature area |
+| `@regression` | Broader functional coverage, edge UI, accessibility specs, mocked network cases |
+| `@api` | Asserts primarily through HTTP/API (setup, contract, or direct API behavior) |
+| `@e2e` | Full UI journey through the app with real backend (default for most Didaxis flows) |
+| `@destructive` | Mutates **shared or global** state only — org locale, roles, feature flags, tenant settings, or other data other tests depend on |
+
+**Not `@destructive`:** creates that `trackProgram` (or similar) deletes in the same run, or other data scoped to that test. Keep `@smoke`, `@sanity`, `@regression`, `@api`, or `@e2e` instead.
+
+**`@destructive` runs:** wrap in `test.describe.configure({ mode: 'serial' })`. CI and local slices use `npm run test:destructive` (`--workers=1`). Any test that mutates shared/global state — including `@destructive` — must **revert in `test.afterEach` or `test.afterAll`** (restore prior locale, role, flag, or setting). Do not leave the environment dirty for parallel suites.
+
+```typescript
+test.describe('Org locale', () => {
+  test.describe.configure({ mode: 'serial' });
+
+  let savedLocale: string;
+
+  test.beforeEach(async ({ adminApi }) => {
+    savedLocale = await adminApi.getOrgLocale();
+  });
+
+  test.afterEach(async ({ adminApi }) => {
+    await adminApi.setOrgLocale(savedLocale);
+  });
+
+  test('admin can set org locale to fr-CA', { tag: '@destructive' }, async ({ page }) => {
+    // ...
+  });
+});
+```
+
+```typescript
+test('creates a program via the UI', { tag: '@e2e' }, async ({ programs, trackProgram }) => {
+  const { name, description } = buildProgramHappyPath();
+  trackProgram(await programs.createProgram(name, description));
+});
+```
+
+Run slices: `npm run test:smoke`, `test:sanity`, `test:regression`, `test:api`, `test:e2e`, `test:destructive`.
+
 ## Auth
 
 Stored session by default (`tests/auth.setup.ts` → `playwright/.auth/user.json`). UI login only when the test is the login page. API login (POST credentials, then inject the token) is for bulk setup, a one-off script, or a stale storageState.
@@ -40,19 +86,52 @@ this.createButton = this.dialog.getByRole('button', { name: 'Create' });
 
 No CSS selectors, XPath, brittle copy, or `.first()` on several matches.
 
+## Test data
+
+| Kind | Location | Notes |
+|------|----------|--------|
+| Happy-path generated values | `test-data/factories/` | `@faker-js/faker`; unique per run; override fields in the factory call |
+| Invalid / boundary inputs | `test-data/invalid/*.ts` | Curated static sets — not random |
+| Secrets and base URLs | `process.env` (e.g. `DIDAXIS_URL`, `DIDAXIS_API_TOKEN`) | Never in source |
+| Repeated UI copy, routes, API paths | Enums or `const` objects (e.g. next to POMs or under `test-data/`) | Same string in two places → one export |
+
+Example factory:
+
+```typescript
+// test-data/factories/program.factory.ts
+import { faker } from '@faker-js/faker';
+
+export function buildProgramHappyPath(overrides: Partial<{ name: string; description: string }> = {}) {
+  const year = faker.number.int({ min: 2024, max: 2030 });
+  return {
+    name: `${faker.commerce.productAdjective()} ${faker.word.noun()} ${year} ${faker.string.alphanumeric(8)}`,
+    description: faker.lorem.paragraph({ min: 1, max: 3 }),
+    ...overrides,
+  };
+}
+```
+
+```typescript
+import { buildProgramHappyPath } from '../test-data/factories/program.factory';
+import { BLANK_PROGRAM_NAME } from '../test-data/invalid/program-names.invalid';
+
+const { name, description } = buildProgramHappyPath();
+const invalidName = BLANK_PROGRAM_NAME;
+```
+
 ## Data and cleanup
 
-Name each created row with `uniqueSuffix()` (`Date.now()` plus a counter from `tests/helpers/didaxis-programs.ts`). Import `test` from `fixtures/cleanup.fixture.ts` and call `trackProgram` with `data.id` from the real create response. The fixture deletes `DELETE /api/programs/<uuid>?purge=true` with `DIDAXIS_API_TOKEN`.
+Prefer `buildProgramHappyPath()` or factories in `test-data/factories/` for names and descriptions; use `uniqueSuffix()` from `tests/helpers/didaxis-programs.ts` when a legacy suffix helper is already in the spec. Import `test` from `fixtures/cleanup.fixture.ts` and call `trackProgram` with `data.id` from the real create response. The fixture deletes `DELETE /api/programs/<uuid>?purge=true` with `DIDAXIS_API_TOKEN`.
 
 ```typescript
 import { expect, test } from '../fixtures/cleanup.fixture';
-import { uniqueSuffix } from './helpers/didaxis-programs';
+import { buildProgramHappyPath } from '../test-data/factories/program.factory';
 
-const programName = `Data Analytics 2026 ${uniqueSuffix()}`;
-trackProgram(await programs.submitCreateProgram());
+const { name: programName, description } = buildProgramHappyPath();
+trackProgram(await programs.submitCreateProgram(programName, description));
 ```
 
-No manual `afterAll` cleanup, no hardcoded Bearer token, and no `trackProgram` on an id the test did not create.
+No manual `afterAll` cleanup for **self-owned** data (the fixture handles it). **Shared/global** mutators use `afterEach`/`afterAll` revert hooks (see Tagging). No hardcoded Bearer token, and no `trackProgram` on an id the test did not create.
 
 ## Waiting
 
@@ -67,10 +146,10 @@ No `waitForTimeout`, and no one-shot `expect(await locator.isVisible()).toBe(tru
 
 ## Network mocking
 
-Fulfill with `page.route` in the spec only the programs call that produces the UI state under test. Tag the test `{ tag: '@edge' }`. Assert copy already on the page object. Read the live page before writing the sentence. When the app renders nothing, assert `programs.heading` is visible and that no `pageerror` fired.
+Fulfill with `page.route` in the spec only the programs call that produces the UI state under test. Tag the test `{ tag: '@regression' }`. Assert copy already on the page object. Read the live page before writing the sentence. When the app renders nothing, assert `programs.heading` is visible and that no `pageerror` fired.
 
 ```typescript
-test('empty list shows the empty state', { tag: '@edge' }, async ({ page }) => {
+test('empty list shows the empty state', { tag: '@regression' }, async ({ page }) => {
   await page.route('**/api/programs', async (route) => {
     const path = new URL(route.request().url()).pathname.replace(/\/$/, '');
     if (route.request().method() !== 'GET' || !path.endsWith('/programs')) {
@@ -95,17 +174,17 @@ Do not mock the endpoint the test claims to verify, fulfill `**/api/programs/**`
 
 ## Accessibility
 
-Scan in `tests/<feature>.a11y.spec.ts` through `expectNoAxeViolations` with tags `wcag2a` and `wcag2aa`. One `{ tag: '@a11y' }` per test. Run the keyboard path through the POM inside `runCiSoftA11y`. A real violation is an info report (rule id, impact, target, help URL) and must not fail CI.
+Scan in `tests/<feature>.a11y.spec.ts` through `expectNoAxeViolations` with axe tags `wcag2a` and `wcag2aa`. Suite tag: `{ tag: '@regression' }` (one per test). Run the keyboard path through the POM inside `runCiSoftA11y`. A real violation is an info report (rule id, impact, target, help URL) and must not fail CI.
 
 ```typescript
-test('has no WCAG 2 A or AA violations', { tag: '@a11y' }, async ({ page }) => {
+test('has no WCAG 2 A or AA violations', { tag: '@regression' }, async ({ page }) => {
   const programs = new ProgramsPage(page);
   await programs.goto();
   await expect(programs.heading).toBeVisible();
   await expectNoAxeViolations(page, { tags: ['wcag2a', 'wcag2aa'] });
 });
 
-test('Enter on New Program opens the dialog', { tag: '@a11y' }, async ({ page }) => {
+test('Enter on New Program opens the dialog', { tag: '@regression' }, async ({ page }) => {
   await runCiSoftA11y('programs-new-program-keyboard', async () => {
     const programs = new ProgramsPage(page);
     await programs.goto();
@@ -126,14 +205,14 @@ Keep `fullyParallel: true`, `retries: process.env.CI ? 2 : 0` (never above 2), `
 test.describe('DS-1: Create new academic program', () => {
   test.describe.configure({ mode: 'serial', timeout: 120_000 });
 
-  test('creates a uniquely named program', async ({ programs, trackProgram }) => {
+  test('creates a uniquely named program', { tag: '@e2e' }, async ({ programs, trackProgram }) => {
     const programName = `Data Analytics 2026 ${uniqueSuffix()}`;
     trackProgram(await programs.createProgram(programName, 'Full-stack web development program'));
     await expectProgramInList(programs, programName);
   });
 });
 
-test('row shows when the program was saved', async ({ page }) => {
+test('row shows when the program was saved', { tag: '@regression' }, async ({ page }) => {
   await page.clock.install({ time: new Date('2026-10-30T16:00:00') });
   const programs = new ProgramsPage(page);
   await programs.goto();

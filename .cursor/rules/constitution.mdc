@@ -1,0 +1,79 @@
+---
+description: Non-negotiable Playwright QA standards — read on every task
+alwaysApply: true
+---
+
+# Project constitution
+
+Hard norms for this repo. Details live in `playwright-conventions.mdc`; routing in `qa-orchestration.mdc`.
+
+## MUST
+
+| Rule | Why |
+|------|-----|
+| Role-based locators in POMs (`getByRole` → label → text → `testId`) | Stable, accessible selectors |
+| Web-first assertions (`toBeVisible`, `toHaveText`, …) | Auto-wait; no manual polling |
+| `storageState` auth (`auth.setup.ts`); UI login only on login specs | Fast, repeatable sessions |
+| Unique names + API/fixture cleanup for data tests create | No polluted env or flakes |
+| Exactly one suite tag per `test` (`@smoke`, `@sanity`, `@regression`, `@api`, `@e2e`, or `@destructive`); never on `describe` | Targeted npm slices and CI gates |
+
+## SHOULD
+
+| Practice | When |
+|----------|------|
+| `@faker-js/faker` factories in `test-data/factories/` | Happy-path generated data |
+| Enums or const objects for repeated UI/API strings | Same string in 2+ places |
+| JSDoc on POM action methods | Non-obvious flows or parameters |
+
+## WON'T
+
+| Forbidden | Instead |
+|-----------|---------|
+| XPath | Role/label/text/`testId` chain |
+| `page.waitForTimeout` | Locator/assertion auto-wait |
+| Secrets in source | `.env` / CI secrets |
+| `any` | Proper types or narrow unions |
+| Weakened/removed assertions to go green | Fix app, test, or file a bug |
+| Self-heal when triage says product bug | `bug-reporter` |
+| Tags on `describe` blocks | Tag each `test` |
+
+## Agent governance
+
+Behavioral contract for agents in this repo — not hook-enforced; follow by convention on every task.
+
+### Audit-then-edit
+
+Inspect before you change: read relevant files, search the repo, and confirm conventions and task context. Do not edit from assumption; verify paths, symbols, and behavior first.
+
+### Proposal (non-trivial tasks)
+
+Before any edit on a **non-trivial** task, emit a **Proposal** block with:
+
+| Field | Content |
+|-------|---------|
+| **Scope** | What will change; what is explicitly out of scope |
+| **Confidence** | Integer **1–10** |
+| **Rationale** | Why this approach |
+| **Unknowns** | Gaps that could invalidate the plan |
+
+Trivial work (e.g. a one-line fix the user named verbatim) may omit the Proposal.
+
+### Confidence gate
+
+| Confidence | Rule |
+|------------|------|
+| **< 5** | Do not proceed — ask for the missing input |
+| **5–7** | Proceed only with Unknowns stated explicitly **and** human approval |
+| **≥ 8** | Proceed |
+
+### No fabrication
+
+Never invent a path, enum, env var, credential, or message. Ask, search, read, or explore (e.g. live UI) instead.
+
+## Skills (`.cursor/skills/`)
+
+`a11y-checks` · axe + keyboard in UI tests · `api-cleanup` · delete created programs/data · `ci-failure-triage` · red CI logs/trace → classification · `explore-and-generate` · coverage gaps → Gherkin · `jira-bug-reporter` · failure → Jira · `jira-ticket-to-gherkin` · ticket + live UI → Gherkin · `pom-conventions` · Didaxis POM rules · `programs-network-edge-cases` · `page.route` API mocks · `self-heal` · one POM locator after drift triage
+
+## Agents (`.cursor/agents/`)
+
+`triage` · classify red runs (defect / test / flake / a11y) · `test-writer` · plan → spec + POM · `bug-reporter` · confirmed defect → Jira + story link

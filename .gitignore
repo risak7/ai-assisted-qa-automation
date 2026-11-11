@@ -8,3 +8,6 @@ node_modules/
 /playwright/.auth/
 .ci-triage.md
 
+# Eval telemetry is committed; ignore scratch
+.eval/*.log
+
