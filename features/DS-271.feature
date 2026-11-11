@@ -2,9 +2,13 @@ Feature: Program name validation and duplicate prevention
   DS-271 — As an admin user, prevent invalid or duplicate program names so that data integrity is maintained.
 
   # Observed on live app (https://test.didaxis.studio/programs):
+  # Live-verified 2026-11-11 (backlog run) against https://test.didaxis.studio/programs
+  # (Programs h2, "+ New Program", dialog "New Program", Create disabled when Program Name empty/whitespace).
+  # Suite green same day: 8 passed, 3 fixme skipped (duplicate name allowed; malformed list TypeError; PATCH 503 AxiosError).
   # - Programs heading (h2), button "+ New Program"
-  # - Dialog "New Program" with Program Name * and Description
-  # - Create button disabled when Program Name is empty or whitespace-only ("   ")
+  # - Dialog "New Program" with Program Name *, Description, Total Program Hours, Default Session Hours, Default Exam Hours, Target Audience, Focus Areas
+  # - Create disabled when Program Name is empty or whitespace-only ("   "); enabled when name is filled
+  # - Program Name placeholder: "e.g. Computer Science BSc"
 
   # Happy paths
 
