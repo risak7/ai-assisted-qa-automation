@@ -1,6 +1,6 @@
 # Suite reliability eval report
 
-Generated: 2026-11-11T02:39:48.756Z  
+Generated: 2026-11-11T03:01:14.043Z  
 Trigger: `test-generation`  
 CI window: last 30 `e2e.yml` workflow runs
 
@@ -22,8 +22,8 @@ CI window: last 30 `e2e.yml` workflow runs
 
 | Metric | Value |
 |--------|-------|
-| Heal PRs (clean / total) | **0 / 3** |
-| Heal success rate | **0.0%** |
+| Heal PRs (clean / total) | **2 / 4** |
+| Heal success rate | **50.0%** |
 | Masked regressions (must be 0) | **2** |
 
 **How measured:** GitHub PRs whose branch starts with `heal/` (or title mentions heal). Clean = smoke/E2E check passed and no `tests/**` or `features/**` diff (POM-only per self-heal policy). Masked regression = heal PR that touched spec/feature files.
