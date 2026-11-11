@@ -13,7 +13,14 @@
     "test:delete-programs": "playwright test --config=playwright.manual.config.ts",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
-    "report": "playwright show-report"
+    "test:smoke": "playwright test --grep @smoke --pass-with-no-tests",
+    "test:sanity": "playwright test --grep @sanity --pass-with-no-tests",
+    "test:regression": "playwright test --grep @regression",
+    "test:api": "playwright test --grep @api",
+    "test:e2e": "playwright test --grep @e2e",
+    "test:destructive": "playwright test --grep @destructive --workers=1",
+    "report": "playwright show-report",
+    "eval:report": "node scripts/generate-eval-report.mjs"
   },
   "repository": {
     "type": "git",
@@ -29,6 +36,7 @@
   "homepage": "https://github.com/risak7/ai-assisted-qa-automation#readme",
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
+    "@faker-js/faker": "^10.6.0",
     "@playwright/test": "^1.63.0",
     "@types/node": "^26.6.3"
   },

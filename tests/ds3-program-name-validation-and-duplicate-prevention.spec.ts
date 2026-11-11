@@ -77,7 +77,7 @@ test.describe('DS-3: Program name validation and duplicate prevention', () => {
     });
 
     test('TC-005: Empty program name is not submitted', async ({ programs }) => {
-      const before = await programs.programRowCount();
+      const before = await programs.programRowCount(1);
 
       await programs.openNewProgramForm();
       await programs.fillNewProgramDescription('Full-stack web development program');
