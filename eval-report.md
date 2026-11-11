@@ -1,6 +1,6 @@
 # Suite reliability eval report
 
-Generated: 2026-11-11T01:41:01.459Z  
+Generated: 2026-11-11T02:11:37.736Z  
 Trigger: `test-generation`  
 CI window: last 30 `e2e.yml` workflow runs
 
@@ -11,7 +11,7 @@ CI window: last 30 `e2e.yml` workflow runs
 | Metric | Value |
 |--------|-------|
 | Unique tests that passed only on retry | **0** |
-| E2E workflow runs in window | 30 (logs fetched for 26) |
+| E2E workflow runs in window | 30 (logs fetched for 25) |
 | Flake rate (flaky tests ÷ runs) | **0.0%** |
 
 **How measured:** Parsed last 30 `e2e.yml` runs via `gh run view --log`, counting unique test titles that show Playwright `(retry #n)` (CI `retries: 2` in playwright.config.ts).
